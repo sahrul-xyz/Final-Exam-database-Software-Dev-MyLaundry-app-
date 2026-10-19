@@ -21,7 +21,7 @@ MyLaundry/
 │   │   │   └── utils/
 │   │   ├── tests/
 │   │   └── package.json
-│   └── dashboard/       # Dashboard Web Mitra & Admin (React + Vite + TypeScript)
+│   └── dashboard/       # Dashboard Web Mitra (React + Vite + TypeScript)
 │       ├── src/
 │       │   ├── components/
 │       │   ├── features/
