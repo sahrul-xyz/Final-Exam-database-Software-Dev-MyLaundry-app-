@@ -1,0 +1,579 @@
+import { createClient } from "@supabase/supabase-js";
+import {
+  Outlet,
+  UserProfile,
+  LaundryServiceItem,
+  CustomerOrder,
+  HandoverMethod,
+  PaymentMethod,
+} from "../types";
+
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  "https://fqlxabqejusalxmyxzyx.supabase.co";
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZxbHhhYnFlanVzYWx4bXl4enl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2ODkwMzMsImV4cCI6MjEwNTI2NTAzM30.o85cw5jWpYFUJ8yEIG84YQrXlhuADoC1LmszReWP8BY";
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+});
+
+export const fallbackOutlets: Outlet[] = [
+  {
+    id: "a0000000-0000-0000-0000-000000000001",
+    name: "Bersih Laundry Setiabudi",
+    address: "Jl. Dr. Setiabudi No. 156, Bandung",
+    distance: "0,8 km",
+    rating: "4,9",
+    price: "Rp8.000 /kg",
+    eta: "2 hari",
+    photo:
+      "https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080",
+    verified: true,
+  },
+  {
+    id: "a0000000-0000-0000-0000-000000000002",
+    name: "FreshFold Dago",
+    address: "Jl. Ir. H. Djuanda No. 88, Bandung",
+    distance: "1,4 km",
+    rating: "4,8",
+    price: "Rp7.500 /kg",
+    eta: "1 hari",
+    photo:
+      "https://images.unsplash.com/photo-1765163076573-26499e530ec8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=80&w=900",
+    verified: true,
+  },
+];
+
+export const fallbackServices: LaundryServiceItem[] = [
+  {
+    id: "srv-1",
+    name: "Cuci + Setrika",
+    price: 8000,
+    pricingType: "per_kg",
+    durationHours: 48,
+  },
+  {
+    id: "srv-2",
+    name: "Cuci Kering",
+    price: 6000,
+    pricingType: "per_kg",
+    durationHours: 24,
+  },
+  {
+    id: "srv-3",
+    name: "Express 6 Jam",
+    price: 14000,
+    pricingType: "per_kg",
+    durationHours: 6,
+  },
+];
+
+export async function getLiveOutlets(): Promise<Outlet[]> {
+  try {
+    const { data, error } = await supabase
+      .from("laundry_outlets")
+      .select(`
+        id,
+        name,
+        address_text,
+        is_active,
+        photo_url,
+        created_at,
+        laundry_services ( price )
+      `)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      return fallbackOutlets;
+    }
+
+    return data.map((item: any, idx: number) => {
+      const services = item.laundry_services || [];
+      const minPrice = services.length
+        ? Math.min(...services.map((s: any) => Number(s.price)))
+        : 8000;
+
+      return {
+        id: item.id,
+        name: item.name,
+        address: item.address_text || "Bandung",
+        distance: `${(0.8 + idx * 0.6).toFixed(1)} km`,
+        rating: "4.9",
+        price: `Mulai Rp${minPrice.toLocaleString("id-ID")} /kg`,
+        eta: "1-2 hari",
+        photo:
+          item.photo_url ||
+          "https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080",
+        verified: true,
+      };
+    });
+  } catch {
+    return fallbackOutlets;
+  }
+}
+
+// ----------------- SERVICES CATALOG -----------------
+
+export async function fetchOutletServices(
+  outletId: string
+): Promise<LaundryServiceItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from("laundry_services")
+      .select("id, name, price, pricing_type, estimated_duration_hours")
+      .eq("outlet_id", outletId)
+      .eq("is_active", true);
+
+    if (error || !data || data.length === 0) {
+      return fallbackServices;
+    }
+
+    return data.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      price: Number(s.price),
+      pricingType: s.pricing_type,
+      durationHours: s.estimated_duration_hours,
+    }));
+  } catch {
+    return fallbackServices;
+  }
+}
+
+// ----------------- ORDERS SERVICE -----------------
+
+export async function createCustomerOrder(params: {
+  customerId: string;
+  outletId: string;
+  outletName: string;
+  service: LaundryServiceItem;
+  quantity: number;
+  handoverMethod: HandoverMethod;
+  paymentMethod: PaymentMethod;
+}): Promise<{ order: CustomerOrder | null; error: string | null }> {
+  try {
+    const totalEstimate = params.service.price * params.quantity;
+    const dateCode = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const orderNumber = `#ML-${dateCode}-${randomSuffix}`;
+    const serviceDate = new Date().toISOString().split("T")[0];
+
+    const initialStatus =
+      params.paymentMethod === "digital"
+        ? "pending_payment"
+        : "pending_partner";
+
+    // 1. Insert ke tabel orders
+    const { data: orderData, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        order_number: orderNumber,
+        customer_id: params.customerId,
+        outlet_id: params.outletId,
+        service_date: serviceDate,
+        status: initialStatus,
+        handover_method: params.handoverMethod,
+        subtotal_estimate: totalEstimate,
+        payment_method: params.paymentMethod,
+        payment_status: "pending",
+        payment_deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        partner_response_deadline: new Date(
+          Date.now() + 30 * 60 * 1000
+        ).toISOString(),
+      })
+      .select("id, order_number, status, created_at")
+      .single();
+
+    if (orderError) {
+      console.error("Order error:", orderError);
+      return { order: null, error: orderError.message };
+    }
+
+    const orderId = orderData.id;
+
+    // 2. Insert ke order_items
+    const { error: itemError } = await supabase.from("order_items").insert({
+      order_id: orderId,
+      service_id: params.service.id.startsWith("srv-")
+        ? null
+        : params.service.id,
+      service_name_snapshot: params.service.name,
+      unit_price_snapshot: params.service.price,
+      quantity: params.quantity,
+      unit: params.service.pricingType === "per_kg" ? "kg" : "item",
+      line_total: totalEstimate,
+    });
+
+    if (itemError) {
+      console.warn("Item error:", itemError.message);
+    }
+
+    // 3. Catat audit history
+    await supabase.from("order_status_history").insert({
+      order_id: orderId,
+      old_status: null,
+      new_status: initialStatus,
+      changed_by: params.customerId,
+      note: "Pesanan dibuat oleh pelanggan",
+    });
+
+    const newOrder: CustomerOrder = {
+      id: orderId,
+      orderNumber,
+      outletId: params.outletId,
+      outletName: params.outletName,
+      status: initialStatus,
+      handoverMethod: params.handoverMethod,
+      subtotalEstimate: totalEstimate,
+      paymentMethod: params.paymentMethod,
+      paymentStatus: "pending",
+      serviceDate,
+      createdAt: orderData.created_at || new Date().toISOString(),
+      items: [
+        {
+          serviceName: params.service.name,
+          unitPrice: params.service.price,
+          quantity: params.quantity,
+          unit: params.service.pricingType === "per_kg" ? "kg" : "item",
+          lineTotal: totalEstimate,
+        },
+      ],
+    };
+
+    return { order: newOrder, error: null };
+  } catch (err: any) {
+    return { order: null, error: err.message || "Gagal membuat pesanan" };
+  }
+}
+
+export async function fetchCustomerOrders(
+  customerId: string
+): Promise<CustomerOrder[]> {
+  try {
+    // Evaluasi otomatis pesanan kedaluwarsa lewat Edge Function (PRD Bab 9.7)
+    supabase.functions.invoke("expire-orders").catch(() => {});
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select(`
+        id,
+        order_number,
+        outlet_id,
+        status,
+        handover_method,
+        subtotal_estimate,
+        final_service_amount,
+        payment_method,
+        payment_status,
+        service_date,
+        created_at,
+        laundry_outlets ( name ),
+        order_items ( id, service_name_snapshot, unit_price_snapshot, quantity, unit, line_total )
+      `)
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((o: any) => ({
+      id: o.id,
+      orderNumber: o.order_number,
+      outletId: o.outlet_id,
+      outletName: o.laundry_outlets?.name || "Outlet Laundry",
+      status: o.status,
+      handoverMethod: o.handover_method,
+      subtotalEstimate: Number(o.subtotal_estimate),
+      finalServiceAmount: o.final_service_amount ? Number(o.final_service_amount) : null,
+      paymentMethod: o.payment_method,
+      paymentStatus: o.payment_status,
+      serviceDate: o.service_date,
+      createdAt: o.created_at,
+      items: (o.order_items || []).map((it: any) => ({
+        id: it.id,
+        serviceName: it.service_name_snapshot,
+        unitPrice: Number(it.unit_price_snapshot),
+        quantity: Number(it.quantity),
+        unit: it.unit,
+        lineTotal: Number(it.line_total),
+      })),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ----------------- FITUR PELANGGAN: ULASAN, KOMPLAIN & TRANSAKSI -----------------
+
+export async function submitCustomerReview(params: {
+  orderId: string;
+  customerId: string;
+  outletId: string;
+  rating: number;
+  comment?: string;
+}): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase.from("reviews").insert({
+      order_id: params.orderId,
+      customer_id: params.customerId,
+      outlet_id: params.outletId,
+      rating: params.rating,
+      comment: params.comment || null,
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Gagal mengirim ulasan" };
+  }
+}
+
+export async function submitCustomerComplaint(params: {
+  orderId: string;
+  customerId: string;
+  reason: string;
+}): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase.from("complaints").insert({
+      order_id: params.orderId,
+      customer_id: params.customerId,
+      reason: params.reason,
+      status: "open",
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Gagal mengajukan komplain" };
+  }
+}
+
+export async function respondToPriceAdjustment(params: {
+  orderId: string;
+  customerId: string;
+  approved: boolean;
+}): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const newStatus = params.approved ? "processing" : "cancelled";
+    const note = params.approved
+      ? "Pelanggan menyetujui penyesuaian biaya aktual."
+      : "Pelanggan menolak penyesuaian biaya, pesanan dibatalkan.";
+
+    const { error: orderError } = await supabase
+      .from("orders")
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq("id", params.orderId);
+
+    if (orderError) return { success: false, error: orderError.message };
+
+    await supabase.from("order_status_history").insert({
+      order_id: params.orderId,
+      new_status: newStatus,
+      changed_by: params.customerId,
+      note,
+    });
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Gagal memproses persetujuan harga" };
+  }
+}
+
+export async function confirmDigitalPaymentSimulation(params: {
+  orderId: string;
+  customerId: string;
+  amount?: number;
+}): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        status: "pending_partner",
+        payment_status: "paid",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", params.orderId);
+
+    if (error) return { success: false, error: error.message };
+
+    // Catat record pembayaran di tabel payments (PRD Bab 9.3)
+    if (params.amount) {
+      await supabase.from("payments").insert({
+        order_id: params.orderId,
+        method: "digital_qris",
+        amount: params.amount,
+        status: "paid",
+        reference: `PAY-SIM-${Date.now()}`,
+        verified_at: new Date().toISOString(),
+      });
+    }
+
+    await supabase.from("order_status_history").insert({
+      order_id: params.orderId,
+      new_status: "pending_partner",
+      changed_by: params.customerId,
+      note: "Pembayaran digital simulasi berhasil diselesaikan oleh pelanggan.",
+    });
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Gagal memproses pembayaran" };
+  }
+}
+
+export function subscribeToCustomerOrders(onUpdate: () => void) {
+  const channel = supabase
+    .channel("customer_orders_realtime_" + Math.random().toString(36).substring(7))
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "orders" },
+      () => {
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ----------------- AUTHENTICATION -----------------
+
+export async function signUpCustomer(params: {
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string;
+}): Promise<{ user: UserProfile | null; error: string | null }> {
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: params.email,
+      password: params.password,
+      options: {
+        data: {
+          full_name: params.fullName,
+          phone: params.phone,
+          role: "customer",
+        },
+      },
+    });
+
+    if (authError) return { user: null, error: authError.message };
+    if (!authData.user) return { user: null, error: "Gagal membuat akun." };
+
+    const userId = authData.user.id;
+
+    // Simpan ke tabel public.profiles
+    await supabase.from("profiles").upsert({
+      id: userId,
+      full_name: params.fullName,
+      phone: params.phone || null,
+      role: "customer",
+    });
+
+    return {
+      user: {
+        id: userId,
+        email: params.email,
+        fullName: params.fullName,
+        phone: params.phone,
+        role: "customer",
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    return { user: null, error: err.message || "Gagal registrasi akun" };
+  }
+}
+
+export async function signInCustomer(params: {
+  email: string;
+  password: string;
+}): Promise<{ user: UserProfile | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: params.email,
+      password: params.password,
+    });
+
+    if (error) return { user: null, error: error.message };
+    if (!data.user) return { user: null, error: "Pengguna tidak ditemukan." };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, phone, role")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    const metaRole = data.user.user_metadata?.role;
+    const rawRole = profile?.role || metaRole;
+
+    const fullName =
+      profile?.full_name ||
+      data.user.user_metadata?.full_name ||
+      data.user.email?.split("@")[0] ||
+      "Pelanggan";
+
+    const phone = profile?.phone || data.user.user_metadata?.phone;
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email || params.email,
+        fullName,
+        phone,
+        role: rawRole === "partner" ? "partner" : "customer",
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    return { user: null, error: err.message || "Gagal masuk" };
+  }
+}
+
+export async function signOutCustomer(): Promise<void> {
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // fallback
+  }
+}
+
+export async function getCurrentCustomer(): Promise<UserProfile | null> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return null;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, phone, role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const metaRole = user.user_metadata?.role;
+    const rawRole = profile?.role || metaRole;
+
+    const fullName =
+      profile?.full_name ||
+      user.user_metadata?.full_name ||
+      user.email?.split("@")[0] ||
+      "Pelanggan";
+
+    return {
+      id: user.id,
+      email: user.email || "",
+      fullName,
+      phone: profile?.phone || user.user_metadata?.phone,
+      role: rawRole === "partner" ? "partner" : "customer",
+    };
+  } catch {
+    return null;
+  }
+}

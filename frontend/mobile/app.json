@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "MyLaundry",
+    "slug": "my-laundry-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#0878f9"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.mylaundry.app"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "254ae46a-d040-4ece-a38e-c743472971d3"
+      }
+    },
+    "owner": "sahrul25xyz"
+  }
+}
