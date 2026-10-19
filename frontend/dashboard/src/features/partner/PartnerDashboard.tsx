@@ -51,15 +51,19 @@ export function PartnerDashboard({
   };
 
   const loadOrders = useCallback(async () => {
+    if (!currentUser?.id) {
+      setLoadingOrders(false);
+      return;
+    }
     try {
-      const data = await fetchPartnerOrders();
+      const data = await fetchPartnerOrders(currentUser.id);
       setOrders(data);
     } catch (err) {
       console.error("Gagal memuat pesanan:", err);
     } finally {
       setLoadingOrders(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     loadOrders();
@@ -982,8 +986,8 @@ function OutletManagement({
   currentUser?: UserProfile | null;
 }) {
   const [outletId, setOutletId] = useState<string>("");
-  const [name, setName] = useState<string>("Sahrul Laundry Setiabudi");
-  const [address, setAddress] = useState<string>("Jl. Dr. Setiabudi No. 156, Bandung");
+  const [name, setName] = useState<string>("");
+  const [address, setAddress] = useState<string>("");
   const [hours, setHours] = useState<string>("08.00 – 20.00");
   const [isActive, setIsActive] = useState<boolean>(true);
   const [services, setServices] = useState<PartnerServiceData[]>([]);
@@ -1004,7 +1008,7 @@ function OutletManagement({
   useEffect(() => {
     if (!currentUser?.id) return;
     setLoading(true);
-    fetchPartnerOutlet(currentUser.id).then((out) => {
+    fetchPartnerOutlet(currentUser.id, currentUser.fullName).then((out) => {
       if (out) {
         setOutletId(out.id);
         setName(out.name);
@@ -1020,7 +1024,7 @@ function OutletManagement({
         setLoading(false);
       }
     });
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.fullName]);
 
   const handleSave = async () => {
     if (!currentUser?.id) {

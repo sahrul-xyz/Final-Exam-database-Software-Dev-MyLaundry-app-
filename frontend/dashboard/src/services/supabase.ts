@@ -311,7 +311,10 @@ export interface PartnerServiceData {
   estimated_duration_hours: number;
 }
 
-export async function fetchPartnerOutlet(partnerId: string): Promise<PartnerOutletData | null> {
+export async function fetchPartnerOutlet(
+  partnerId: string,
+  partnerName?: string
+): Promise<PartnerOutletData | null> {
   if (!isSupabaseConfigured) return null;
 
   try {
@@ -332,13 +335,59 @@ export async function fetchPartnerOutlet(partnerId: string): Promise<PartnerOutl
         .maybeSingle();
 
       if (unowned) {
-        // Klaim outlet default tersebut
+        // Klaim outlet default tersebut jika ada
         await supabase
           .from("laundry_outlets")
           .update({ owner_id: partnerId })
           .eq("id", unowned.id);
 
         data = { ...unowned };
+      } else {
+        // 3. Jika mitra belum memiliki outlet sama sekali, buatkan outlet baru otomatis khusus mitra ini
+        const defaultOutletName = partnerName ? `Outlet ${partnerName}` : "Outlet Laundry Baru";
+        const { data: newOutlet, error: createError } = await supabase
+          .from("laundry_outlets")
+          .insert({
+            owner_id: partnerId,
+            name: defaultOutletName,
+            address_text: "Alamat belum diatur",
+            operating_hours: "08.00 - 20.00",
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (!createError && newOutlet) {
+          data = newOutlet;
+
+          // Buat template 3 layanan awal untuk outlet baru ini
+          await supabase.from("laundry_services").insert([
+            {
+              outlet_id: newOutlet.id,
+              name: "Cuci + Setrika",
+              price: 8000,
+              pricing_type: "per_kg",
+              estimated_duration_hours: 48,
+              is_active: true,
+            },
+            {
+              outlet_id: newOutlet.id,
+              name: "Cuci Kering",
+              price: 6000,
+              pricing_type: "per_kg",
+              estimated_duration_hours: 24,
+              is_active: true,
+            },
+            {
+              outlet_id: newOutlet.id,
+              name: "Express 6 Jam",
+              price: 14000,
+              pricing_type: "per_kg",
+              estimated_duration_hours: 6,
+              is_active: true,
+            },
+          ]);
+        }
       }
     }
 
@@ -668,14 +717,34 @@ export const fallbackPartnerOrders: PartnerOrder[] = [
   },
 ];
 
-export async function fetchPartnerOrders(): Promise<PartnerOrder[]> {
+export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrder[]> {
   if (!isSupabaseConfigured) return fallbackPartnerOrders;
 
   try {
     // Evaluasi otomatis pesanan kedaluwarsa lewat Edge Function (PRD Bab 9.7)
     supabase.functions.invoke("expire-orders").catch(() => {});
 
-    const { data, error } = await supabase
+    // Dapatkan daftar ID outlet milik mitra ini agar pesanan terisolasi
+    let outletIds: string[] | null = null;
+    if (partnerId) {
+      const { data: partnerOutlets, error: outError } = await supabase
+        .from("laundry_outlets")
+        .select("id")
+        .eq("owner_id", partnerId);
+
+      if (outError) {
+        console.warn("fetchPartnerOrders outError:", outError.message);
+      }
+
+      if (!partnerOutlets || partnerOutlets.length === 0) {
+        // Mitra ini belum memiliki outlet -> pasti belum memiliki pesanan
+        return [];
+      }
+
+      outletIds = partnerOutlets.map((o: any) => o.id);
+    }
+
+    let query = supabase
       .from("orders")
       .select(`
         id,
@@ -707,12 +776,18 @@ export async function fetchPartnerOrders(): Promise<PartnerOrder[]> {
           id,
           name
         )
-      `)
-      .order("created_at", { ascending: false });
+      `);
+
+    // Terapkan filter outlet jika partnerId ada
+    if (outletIds && outletIds.length > 0) {
+      query = query.in("outlet_id", outletIds);
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     if (error) {
       console.warn("fetchPartnerOrders query warning:", error.message);
-      return fallbackPartnerOrders;
+      return [];
     }
 
     if (!data || data.length === 0) {
@@ -757,7 +832,7 @@ export async function fetchPartnerOrders(): Promise<PartnerOrder[]> {
     });
   } catch (err: any) {
     console.error("fetchPartnerOrders exception:", err);
-    return fallbackPartnerOrders;
+    return [];
   }
 }
 
