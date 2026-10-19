@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { UserProfile } from "../types";
 import { signInCustomer, signUpCustomer } from "../services/supabase";
+import { BrandMark } from "../components/Brand";
 
 export function AuthScreen({
   onLoginSuccess,
@@ -83,11 +84,9 @@ export function AuthScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brandContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoIcon}>🧺</Text>
-          </View>
+          <BrandMark size={68} style={styles.brandLogo} />
           <Text style={styles.brandTitle}>
-            My<Text style={styles.brandHighlight}>Laundry</Text>
+            <Text style={styles.brandHighlight}>My</Text>Laundry
           </Text>
           <Text style={styles.brandSubtitle}>
             {isRegister
@@ -238,22 +237,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 28,
   },
-  logoCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: "#2493ff",
-    justifyContent: "center",
-    alignItems: "center",
+  brandLogo: {
     marginBottom: 14,
-    shadowColor: "#0878f9",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  logoIcon: {
-    fontSize: 34,
   },
   brandTitle: {
     fontSize: 28,
