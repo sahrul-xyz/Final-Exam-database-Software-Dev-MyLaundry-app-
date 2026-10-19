@@ -207,18 +207,73 @@ Target berikut digunakan sebagai kriteria pengujian proyek, bukan klaim performa
 8. Mitra menandai pesanan selesai; masa komplain 1 jam dimulai.
 9. Mitra melihat ringkasan komisi, tagihan komisi tunai, dan payout simulasi.
 
-## 5.3 User Stories
+## 5.3 User Stories & Acceptance Criteria
 
-| ID | Sebagai | Saya ingin | Agar |
-|---|---|---|---|
-| US-01 | Pelanggan | Membuat akun dan login | Saya dapat menggunakan aplikasi secara personal |
-| US-02 | Pelanggan | Mencari outlet laundry | Saya menemukan pilihan yang sesuai |
-| US-03 | Pelanggan | Melihat harga dan layanan | Saya dapat membandingkan pilihan |
-| US-04 | Pelanggan | Membuat pesanan | Saya dapat menggunakan layanan laundry |
-| US-05 | Pelanggan | Melihat status pesanan | Saya mengetahui progres pengerjaan |
-| US-06 | Pelanggan | Memberikan ulasan | Saya dapat membagikan pengalaman |
-| US-07 | Mitra | Mengelola layanan dan harga | Informasi outlet tetap akurat |
-| US-08 | Mitra | Mengelola pesanan | Proses operasional tercatat |
+Sesuai kriteria evaluasi IK102 Software Development Fundamentals dan instrumen riset lapangan ([`docs/Kerangka_Wawancara_MyLanundry_V1.md`](file:///c:/KULIAH/MyLaundry/docs/Kerangka_Wawancara_MyLanundry_V1.md)), berikut adalah 8 User Stories inti yang dilengkapi dengan Kriteria Penerimaan (*Acceptance Criteria*):
+
+### US-01: Autentikasi Pengguna (Pelanggan & Mitra)
+- **Sebagai:** Pelanggan atau Mitra Baru
+- **Saya ingin:** Mendaftar akun dengan email & password dan login ke sistem
+- **Agar:** Saya dapat mengakses layanan MyLaundry sesuai peran (*role*) saya secara aman
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-01.1 (Pendaftaran Berhasil):** Given formulir registrasi diisi dengan nama, email valid, password minimal 6 karakter, dan role (`customer`/`partner`), When tombol "Daftar" ditekan, Then akun tersimpan di Supabase Auth, trigger `handle_new_user` membuat baris di `profiles`, dan pengguna langsung diarahkan ke layar sesuai perannya.
+  - **AC-01.2 (Validasi Kredensial Invalid):** Given email salah format atau password keliru dimasukkan pada form login, When tombol "Masuk" ditekan, Then sistem menampilkan pesan error informatif dan memblokir akses ke fitur privat.
+
+### US-02: Pencarian & Eksplorasi Outlet
+- **Sebagai:** Pelanggan
+- **Saya ingin:** Mencari dan memfilter outlet laundry berdasarkan nama outlet atau area layanan
+- **Agar:** Saya dapat menemukan laundry terdekat yang melayani lokasi saya dengan cepat
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-02.1 (Pencarian Kata Kunci):** Given pengguna mengetik kata kunci pada kolom pencarian di Beranda (misal "Setiabudi" atau "Dago"), When hasil dimuat, Then daftar outlet yang ditampilkan hanya yang memiliki kecocokan pada `name` atau `service_area`.
+  - **AC-02.2 (Filter Outlet Aktif):** Given outlet ditandai `is_active = false` oleh mitra, When pelanggan mencari laundry di katalog publik, Then outlet non-aktif tersebut tidak ditampilkan.
+
+### US-03: Katalog Layanan & Perbandingan Harga
+- **Sebagai:** Pelanggan
+- **Saya ingin:** Melihat daftar layanan, jenis tarif (per kg/item), dan estimasi durasi pengerjaan outlet
+- **Agar:** Saya dapat membandingkan harga secara transparan sebelum memesan
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-03.1 (Rincian Tarif Transparan):** Given pelanggan membuka profil outlet tertentu, When katalog layanan dibuka, Then sistem menampilkan rincian nama layanan, format harga Rupiah yang valid, satuan (`kg` atau `item`), dan estimasi jam pengerjaan.
+  - **AC-03.2 (Empty State):** Given outlet belum mendaftarkan layanan aktif, When pelanggan membuka modal pemesanan, Then sistem menampilkan pesan *empty state* dan menonaktifkan tombol pemesanan.
+
+### US-04: Pembuatan Pesanan Atomik (Checkout)
+- **Sebagai:** Pelanggan
+- **Saya ingin:** Membuat pesanan dengan memilih layanan, estimasi kuantitas, metode penyerahan, dan metode pembayaran
+- **Agar:** Pesanan laundry saya tercatat secara resmi dan kuota kapasitas outlet teralokasikan
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-04.1 (Transaksi Atomik Sukses):** Given pelanggan memilih layanan aktif, kuantitas minimal 1, metode penyerahan, dan metode pembayaran, When tombol "Pesan Sekarang" dikonfirmasi, Then stored procedure atomik `create_order_atomic` mengeksekusi insert ke `orders`, `order_items` (snapshot harga), `order_status_history`, dan `capacity_reservations` dalam satu transaksi ACID yang berhasil seluruhnya.
+  - **AC-04.2 (Rollback pada Input Invalid):** Given kuantitas bernilai 0 atau negatif dimasukkan, When pesanan dikirim, Then stored procedure me-ROLLBACK seluruh operasi dan tidak ada data parsial yang tersimpan di database.
+
+### US-05: Pelacakan Status Pesanan Realtime
+- **Sebagai:** Pelanggan
+- **Saya ingin:** Memantau perkembangan status pengerjaan pakaian saya dari penerimaan hingga selesai secara live
+- **Agar:** Saya mengetahui kapan laundry sedang dicuci, siap diambil, atau diantar tanpa perlu menghubungi outlet
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-05.1 (Live Update via Realtime):** Given pelanggan membuka tab "Pesanan" pada aplikasi mobile, When mitra mengubah status pesanan dari "accepted" ke "processing", Then layar pelanggan otomatis memperbarui status dan linimasa tanpa perlu reload manual.
+  - **AC-05.2 (Isolasi Data Pesanan):** Given pelanggan terautentikasi dengan ID tertentu, When membaca riwayat pesanan, Then RLS database menjamin pelanggan hanya dapat melihat data pesanannya sendiri.
+
+### US-06: Ulasan & Penilaian Pesanan Selesai
+- **Sebagai:** Pelanggan
+- **Saya ingin:** Memberikan rating bintang (1-5) dan ulasan tertulis setelah pesanan selesai
+- **Agar:** Saya dapat memberikan apresiasi atau masukan performa kepada outlet laundry
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-06.1 (Submit Rating Pesanan Selesai):** Given pesanan telah berstatus `completed`, When pelanggan memilih rating bintang 1–5, menulis komentar, dan menekan "Kirim Ulasan", Then ulasan tersimpan di tabel `reviews` dan outlet menerima nilai rating tersebut.
+  - **AC-06.2 (Enforce 1 Review per Order):** Given pesanan telah memiliki ulasan di database, When terjadi upaya pengiriman ulasan ulang untuk `order_id` yang sama, Then sistem menolak penyimpanan karena adanya unique constraint pada `reviews.order_id`.
+
+### US-07: Pengelolaan Layanan & Tarif Mitra
+- **Sebagai:** Mitra Laundry
+- **Saya ingin:** Menambah, mengubah harga, dan mengaktifkan/menonaktifkan layanan laundry di dashboard web
+- **Agar:** Katalog layanan outlet saya selalu mutakhir dan mencerminkan kapasitas operasional
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-07.1 (Pembaruan Tarif Tanpa Merusak Data Lama):** Given mitra mengubah tarif layanan dari Rp8.000 menjadi Rp10.000/kg, When disimpan, Then harga baru berlaku untuk pesanan baru, sementara pesanan lama tetap menjaga harga snapshot di `order_items`.
+  - **AC-07.2 (Validasi Nilai Non-Negatif):** Given mitra memasukkan tarif bernilai negatif, When tombol simpan ditekan, Then sistem menampilkan validasi error dan memblokir penyimpanan ke database.
+
+### US-08: Manajemen Operasional & Pembaruan Status Mitra
+- **Sebagai:** Mitra Laundry
+- **Saya ingin:** Menerima/menolak pesanan masuk, mencatat berat aktual, dan memperbarui status pengerjaan
+- **Agar:** Alur operasional pengerjaan laundry berjalan tertib, transparan, dan tercatat di buku besar
+- **Acceptance Criteria (Kriteria Penerimaan):**
+  - **AC-08.1 (Penyesuaian Berat Aktual):** Given pesanan berstatus `accepted`, When mitra menimbang cucian dan memasukkan berat riil, Then total biaya disesuaikan, status berubah ke `processing`, dan audit trail mencatat penyesuaian tersebut.
+  - **AC-08.2 (Penyelesaian & Penetapan Batas Komplain):** Given cucian selesai dikerjakan, When mitra menandai pesanan `completed`, Then server mencatat `completed_at` dan otomatis menetapkan `complaint_deadline = completed_at + 1 hour`.
 
 # 6. Functional Requirements
 

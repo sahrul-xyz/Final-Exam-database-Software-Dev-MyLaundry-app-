@@ -169,59 +169,91 @@ export async function createCustomerOrder(params: {
         ? "pending_payment"
         : "pending_partner";
 
-    // 1. Insert ke tabel orders
-    const { data: orderData, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_number: orderNumber,
-        customer_id: params.customerId,
-        outlet_id: params.outletId,
-        service_date: serviceDate,
-        status: initialStatus,
-        handover_method: params.handoverMethod,
-        subtotal_estimate: totalEstimate,
-        payment_method: params.paymentMethod,
-        payment_status: "pending",
-        payment_deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        partner_response_deadline: new Date(
-          Date.now() + 30 * 60 * 1000
-        ).toISOString(),
-      })
-      .select("id, order_number, status, created_at")
-      .single();
+    const serviceUuid = params.service.id.startsWith("srv-")
+      ? null
+      : params.service.id;
+    const unit = params.service.pricingType === "per_kg" ? "kg" : "item";
 
-    if (orderError) {
-      console.error("Order error:", orderError);
-      return { order: null, error: orderError.message };
+    // Coba eksekusi transaksi atomik via PostgreSQL Stored Procedure (IK301 Transaksi)
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "create_order_atomic",
+      {
+        p_customer_id: params.customerId,
+        p_outlet_id: params.outletId,
+        p_service_date: serviceDate,
+        p_handover_method: params.handoverMethod,
+        p_payment_method: params.paymentMethod,
+        p_service_id: serviceUuid,
+        p_service_name: params.service.name,
+        p_unit_price: params.service.price,
+        p_quantity: params.quantity,
+        p_unit: unit,
+        p_subtotal: totalEstimate,
+      }
+    );
+
+    let orderId: string;
+    let finalOrderNumber: string = orderNumber;
+    let finalCreatedAt: string = new Date().toISOString();
+
+    if (!rpcError && rpcData?.order_id) {
+      orderId = rpcData.order_id;
+      finalOrderNumber = rpcData.order_number || orderNumber;
+      finalCreatedAt = rpcData.created_at || finalCreatedAt;
+    } else {
+      // Fallback transaksi klien jika RPC belum dieksekusi di database
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          order_number: orderNumber,
+          customer_id: params.customerId,
+          outlet_id: params.outletId,
+          service_date: serviceDate,
+          status: initialStatus,
+          handover_method: params.handoverMethod,
+          subtotal_estimate: totalEstimate,
+          payment_method: params.paymentMethod,
+          payment_status: "pending",
+          payment_deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          partner_response_deadline: new Date(
+            Date.now() + 30 * 60 * 1000
+          ).toISOString(),
+        })
+        .select("id, order_number, status, created_at")
+        .single();
+
+      if (orderError) {
+        console.error("Order error:", orderError);
+        return { order: null, error: orderError.message };
+      }
+
+      orderId = orderData.id;
+      finalCreatedAt = orderData.created_at || finalCreatedAt;
+
+      // Insert ke order_items
+      const { error: itemError } = await supabase.from("order_items").insert({
+        order_id: orderId,
+        service_id: serviceUuid,
+        service_name_snapshot: params.service.name,
+        unit_price_snapshot: params.service.price,
+        quantity: params.quantity,
+        unit,
+        line_total: totalEstimate,
+      });
+
+      if (itemError) {
+        console.warn("Item error:", itemError.message);
+      }
+
+      // Catat audit history
+      await supabase.from("order_status_history").insert({
+        order_id: orderId,
+        old_status: null,
+        new_status: initialStatus,
+        changed_by: params.customerId,
+        note: "Pesanan dibuat oleh pelanggan",
+      });
     }
-
-    const orderId = orderData.id;
-
-    // 2. Insert ke order_items
-    const { error: itemError } = await supabase.from("order_items").insert({
-      order_id: orderId,
-      service_id: params.service.id.startsWith("srv-")
-        ? null
-        : params.service.id,
-      service_name_snapshot: params.service.name,
-      unit_price_snapshot: params.service.price,
-      quantity: params.quantity,
-      unit: params.service.pricingType === "per_kg" ? "kg" : "item",
-      line_total: totalEstimate,
-    });
-
-    if (itemError) {
-      console.warn("Item error:", itemError.message);
-    }
-
-    // 3. Catat audit history
-    await supabase.from("order_status_history").insert({
-      order_id: orderId,
-      old_status: null,
-      new_status: initialStatus,
-      changed_by: params.customerId,
-      note: "Pesanan dibuat oleh pelanggan",
-    });
 
     const newOrder: CustomerOrder = {
       id: orderId,
@@ -426,7 +458,7 @@ export async function confirmDigitalPaymentSimulation(params: {
 
 export function subscribeToCustomerOrders(onUpdate: () => void) {
   const channel = supabase
-    .channel("customer_orders_realtime_" + Math.random().toString(36).substring(7))
+    .channel("customer_orders_realtime")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "orders" },

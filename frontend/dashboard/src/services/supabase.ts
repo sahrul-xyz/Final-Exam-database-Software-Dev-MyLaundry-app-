@@ -1027,7 +1027,7 @@ export function subscribeToOrders(onUpdate: () => void) {
   if (!isSupabaseConfigured) return () => {};
 
   const channel = supabase
-    .channel("partner_orders_realtime_" + Math.random().toString(36).substring(7))
+    .channel("partner_orders_realtime")
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "orders" },
@@ -1065,4 +1065,66 @@ export async function claimDefaultOutletIfUnowned(partnerId: string): Promise<vo
     // Abaikan jika permission RLS membatasi sebelum patch dijalankan
   }
 }
+
+// -------------------------------------------------------
+// IK301: QUERY ANALITIK DATABASE (JOIN & AGREGASI)
+// -------------------------------------------------------
+
+export interface PartnerAnalyticsReport {
+  outlet_id: string;
+  outlet_name: string;
+  service_area: string;
+  total_orders: number;
+  completed_orders: number;
+  pending_orders: number;
+  processing_orders: number;
+  cancelled_orders: number;
+  total_revenue: number;
+  avg_order_value: number;
+  avg_rating: number;
+  total_reviews: number;
+}
+
+export async function fetchPartnerDatabaseAnalytics(
+  outletId?: string
+): Promise<PartnerAnalyticsReport | null> {
+  if (!isSupabaseConfigured) return null;
+
+  try {
+    let query = supabase.from("v_partner_analytics").select("*");
+    if (outletId) {
+      query = query.eq("outlet_id", outletId);
+    }
+    const { data, error } = await query.maybeSingle();
+    if (error) {
+      console.warn("fetchPartnerDatabaseAnalytics warning:", error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn("fetchPartnerDatabaseAnalytics error:", err);
+    return null;
+  }
+}
+
+export async function fetchServiceSalesReport(outletId?: string) {
+  if (!isSupabaseConfigured) return [];
+
+  try {
+    let query = supabase.from("v_service_sales_report").select("*");
+    if (outletId) {
+      query = query.eq("outlet_id", outletId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn("fetchServiceSalesReport warning:", error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn("fetchServiceSalesReport error:", err);
+    return [];
+  }
+}
+
 
