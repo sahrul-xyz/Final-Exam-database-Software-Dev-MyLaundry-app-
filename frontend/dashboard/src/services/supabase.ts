@@ -454,6 +454,106 @@ export async function updatePartnerServicePrice(
   }
 }
 
+export async function savePartnerService(service: {
+  id?: string;
+  outlet_id: string;
+  name: string;
+  price: number;
+  pricing_type: string;
+  estimated_duration_hours: number;
+  is_active?: boolean;
+}): Promise<{ success: boolean; data?: PartnerServiceData; error: string | null }> {
+  if (!isSupabaseConfigured) {
+    return {
+      success: true,
+      data: {
+        id: service.id || `mock-${Date.now()}`,
+        name: service.name,
+        price: service.price,
+        pricing_type: service.pricing_type,
+        estimated_duration_hours: service.estimated_duration_hours,
+      },
+      error: null,
+    };
+  }
+
+  try {
+    if (service.id && !service.id.startsWith("mock-") && !service.id.startsWith("s-")) {
+      const { data, error } = await supabase
+        .from("laundry_services")
+        .update({
+          name: service.name,
+          price: service.price,
+          pricing_type: service.pricing_type,
+          estimated_duration_hours: service.estimated_duration_hours,
+          is_active: service.is_active ?? true,
+        })
+        .eq("id", service.id)
+        .select()
+        .single();
+
+      if (error) return { success: false, error: error.message };
+      return {
+        success: true,
+        data: {
+          id: data.id,
+          name: data.name,
+          price: Number(data.price),
+          pricing_type: data.pricing_type,
+          estimated_duration_hours: data.estimated_duration_hours,
+        },
+        error: null,
+      };
+    } else {
+      const { data, error } = await supabase
+        .from("laundry_services")
+        .insert({
+          outlet_id: service.outlet_id,
+          name: service.name,
+          price: service.price,
+          pricing_type: service.pricing_type,
+          estimated_duration_hours: service.estimated_duration_hours,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) return { success: false, error: error.message };
+      return {
+        success: true,
+        data: {
+          id: data.id,
+          name: data.name,
+          price: Number(data.price),
+          pricing_type: data.pricing_type,
+          estimated_duration_hours: data.estimated_duration_hours,
+        },
+        error: null,
+      };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deletePartnerService(
+  serviceId: string
+): Promise<{ success: boolean; error: string | null }> {
+  if (!isSupabaseConfigured) return { success: true, error: null };
+
+  try {
+    const { error } = await supabase
+      .from("laundry_services")
+      .delete()
+      .eq("id", serviceId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 
 // ----------------- PARTNER ORDERS SERVICE -----------------
 
