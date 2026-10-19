@@ -24,6 +24,7 @@ import {
   savePartnerService,
   deletePartnerService,
   PartnerServiceData,
+  uploadOutletPhoto,
 } from "../../services/supabase";
 
 export function PartnerDashboard({
@@ -978,6 +979,39 @@ function Timeline({ orders }: { orders: PartnerOrder[] }) {
 // -------------------------------------------------------------
 // SUB-KOMPONEN: KELOLA OUTLET
 // -------------------------------------------------------------
+const OUTLET_PHOTO_PRESETS = [
+  {
+    id: "preset-1",
+    label: "Modern Laundromat",
+    url: "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=1080&q=80",
+  },
+  {
+    id: "preset-2",
+    label: "Clean Laundry Studio",
+    url: "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=1080&q=80",
+  },
+  {
+    id: "preset-3",
+    label: "Fresh Folded Linens",
+    url: "https://images.unsplash.com/photo-1489274495757-95c7c837b101?auto=format&fit=crop&w=1080&q=80",
+  },
+  {
+    id: "preset-4",
+    label: "Minimalist Wash Room",
+    url: "https://images.unsplash.com/photo-1521656693074-0ef32e80a5d5?auto=format&fit=crop&w=1080&q=80",
+  },
+  {
+    id: "preset-5",
+    label: "Premium Fabric Care",
+    url: "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?auto=format&fit=crop&w=1080&q=80",
+  },
+  {
+    id: "preset-6",
+    label: "FreshFold Aesthetic",
+    url: "https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080",
+  },
+];
+
 function OutletManagement({
   notify,
   currentUser,
@@ -990,9 +1024,18 @@ function OutletManagement({
   const [address, setAddress] = useState<string>("");
   const [hours, setHours] = useState<string>("08.00 – 20.00");
   const [isActive, setIsActive] = useState<boolean>(true);
+  const [photoUrl, setPhotoUrl] = useState<string>("");
   const [services, setServices] = useState<PartnerServiceData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+
+  // Modal Ganti Foto Outlet
+  const [photoModalOpen, setPhotoModalOpen] = useState<boolean>(false);
+  const [photoTab, setPhotoTab] = useState<"upload" | "preset" | "url">("upload");
+  const [selectedPhoto, setSelectedPhoto] = useState<string>("");
+  const [customUrlInput, setCustomUrlInput] = useState<string>("");
+  const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+  const [savingPhoto, setSavingPhoto] = useState<boolean>(false);
 
   // Modal Kelola Layanan & Tarif
   const [serviceModalOpen, setServiceModalOpen] = useState<boolean>(false);
@@ -1015,6 +1058,7 @@ function OutletManagement({
         setAddress(out.address_text);
         setHours(out.operating_hours);
         setIsActive(out.is_active);
+        setPhotoUrl(out.photo_url || "");
 
         fetchPartnerServices(out.id).then((srvs) => {
           setServices(srvs);
@@ -1039,6 +1083,7 @@ function OutletManagement({
       address_text: address,
       operating_hours: hours,
       is_active: isActive,
+      photo_url: photoUrl,
     });
     setSaving(false);
 
@@ -1047,6 +1092,76 @@ function OutletManagement({
       notify(`Profil '${name}' berhasil disimpan & aktif di aplikasi mobile!`);
     } else {
       notify(`Gagal menyimpan: ${res.error}`);
+    }
+  };
+
+  const handleOpenPhotoModal = () => {
+    setSelectedPhoto(photoUrl || laundryPhoto);
+    setCustomUrlInput(photoUrl || "");
+    setPhotoTab("upload");
+    setPhotoModalOpen(true);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      notify("Mohon pilih file gambar (JPG, PNG, atau WebP).");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    const res = await uploadOutletPhoto(outletId || "temp", file);
+    setUploadingPhoto(false);
+
+    if (res.url) {
+      setSelectedPhoto(res.url);
+      notify("Foto berhasil diunggah! Klik 'Terapkan & Simpan Foto' untuk mengaktifkannya.");
+    } else {
+      notify(`Gagal memproses foto: ${res.error}`);
+    }
+  };
+
+  const handleApplyCustomUrl = () => {
+    const trimmed = customUrlInput.trim();
+    if (!trimmed) {
+      notify("Mohon masukkan tautan URL gambar yang valid.");
+      return;
+    }
+    setSelectedPhoto(trimmed);
+    notify("URL gambar diterapkan pada preview.");
+  };
+
+  const handleSavePhotoModal = async () => {
+    if (!selectedPhoto) {
+      notify("Pilih atau unggah foto terlebih dahulu.");
+      return;
+    }
+    if (!currentUser?.id) {
+      notify("Pengguna belum login");
+      return;
+    }
+
+    setSavingPhoto(true);
+    const res = await savePartnerOutlet({
+      id: outletId || undefined,
+      owner_id: currentUser.id,
+      name,
+      address_text: address,
+      operating_hours: hours,
+      is_active: isActive,
+      photo_url: selectedPhoto,
+    });
+    setSavingPhoto(false);
+
+    if (res.success) {
+      if (res.id && !outletId) setOutletId(res.id);
+      setPhotoUrl(selectedPhoto);
+      setPhotoModalOpen(false);
+      notify("Foto outlet berhasil diperbarui & langsung tampil di aplikasi mobile!");
+    } else {
+      notify(`Gagal menyimpan foto: ${res.error}`);
     }
   };
 
@@ -1136,9 +1251,71 @@ function OutletManagement({
           title="Profil Outlet Saya"
           subtitle="Informasi ini langsung tampil dan dapat dipesan di aplikasi mobile"
         />
-        <div className="cover-photo">
-          <img src={laundryPhoto} alt="Interior outlet" />
-          <Button variant="secondary">Ganti Foto</Button>
+        <div className="cover-photo" style={{ position: "relative" }}>
+          <img
+            src={photoUrl || laundryPhoto}
+            alt={name || "Interior outlet"}
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = laundryPhoto;
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(to top, rgba(15, 23, 42, 0.72) 0%, rgba(15, 23, 42, 0.15) 50%, transparent 100%)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              left: "16px",
+              bottom: "14px",
+              color: "white",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "10px",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px",
+                fontWeight: 700,
+                background: "rgba(0, 0, 0, 0.45)",
+                padding: "3px 8px",
+                borderRadius: "6px",
+                display: "inline-block",
+                marginBottom: "4px",
+              }}
+            >
+              Foto Utama Outlet
+            </span>
+            <div style={{ fontSize: "15px", fontWeight: 800 }}>
+              {name || "Outlet Laundry"}
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={handleOpenPhotoModal}
+            style={{
+              position: "absolute",
+              right: "12px",
+              bottom: "12px",
+              background: "rgba(255, 255, 255, 0.95)",
+              color: "var(--navy-900)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.2)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontWeight: 700,
+              fontSize: "11px",
+              cursor: "pointer",
+            }}
+          >
+            <Icon name="camera" size={14} /> Ganti Foto
+          </Button>
         </div>
 
         {loading ? (
@@ -1357,6 +1534,318 @@ function OutletManagement({
           ))
         )}
       </section>
+
+      {/* MODAL GANTI FOTO OUTLET */}
+      {photoModalOpen && (
+        <div className="modal-backdrop" onClick={() => setPhotoModalOpen(false)}>
+          <div
+            className="modal-dialog"
+            style={{ maxWidth: "560px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <div>
+                <span className="eyebrow">FOTO PROFIL OUTLET</span>
+                <h3>Ganti Foto Outlet</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoModalOpen(false)}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: "var(--muted)",
+                }}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Preview Box */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--navy-900)" }}>
+                    Preview Tampilan di Mobile & Web
+                  </span>
+                  <span style={{ fontSize: "10px", color: "var(--muted)" }}>
+                    Rasio Landscape
+                  </span>
+                </div>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "170px",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    position: "relative",
+                    background: "#0f172a",
+                    border: "1px solid var(--line)",
+                  }}
+                >
+                  <img
+                    src={selectedPhoto || laundryPhoto}
+                    alt="Preview"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = laundryPhoto;
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: "10px",
+                      left: "12px",
+                      background: "rgba(0, 0, 0, 0.65)",
+                      color: "white",
+                      padding: "4px 10px",
+                      borderRadius: "6px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      backdropFilter: "blur(4px)",
+                    }}
+                  >
+                    {name || "Nama Outlet"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div
+                style={{
+                  display: "flex",
+                  background: "#f1f5f9",
+                  padding: "3px",
+                  borderRadius: "10px",
+                  gap: "4px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setPhotoTab("upload")}
+                  style={{
+                    flex: 1,
+                    padding: "7px 10px",
+                    borderRadius: "8px",
+                    border: 0,
+                    background: photoTab === "upload" ? "white" : "transparent",
+                    color: photoTab === "upload" ? "var(--blue-700)" : "var(--muted)",
+                    fontWeight: 700,
+                    fontSize: "11px",
+                    cursor: "pointer",
+                    boxShadow: photoTab === "upload" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  📁 Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhotoTab("preset")}
+                  style={{
+                    flex: 1,
+                    padding: "7px 10px",
+                    borderRadius: "8px",
+                    border: 0,
+                    background: photoTab === "preset" ? "white" : "transparent",
+                    color: photoTab === "preset" ? "var(--blue-700)" : "var(--muted)",
+                    fontWeight: 700,
+                    fontSize: "11px",
+                    cursor: "pointer",
+                    boxShadow: photoTab === "preset" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  ✨ Galeri Pilihan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhotoTab("url")}
+                  style={{
+                    flex: 1,
+                    padding: "7px 10px",
+                    borderRadius: "8px",
+                    border: 0,
+                    background: photoTab === "url" ? "white" : "transparent",
+                    color: photoTab === "url" ? "var(--blue-700)" : "var(--muted)",
+                    fontWeight: 700,
+                    fontSize: "11px",
+                    cursor: "pointer",
+                    boxShadow: photoTab === "url" ? "0 2px 5px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  🔗 Link URL
+                </button>
+              </div>
+
+              {/* TAB 1: UPLOAD FILE */}
+              {photoTab === "upload" && (
+                <div
+                  style={{
+                    border: "2px dashed #93c5fd",
+                    borderRadius: "12px",
+                    padding: "24px 16px",
+                    textAlign: "center",
+                    background: "#eff6ff",
+                    cursor: "pointer",
+                    position: "relative",
+                  }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    disabled={uploadingPhoto}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      opacity: 0,
+                      cursor: "pointer",
+                      width: "100%",
+                      height: "100%",
+                    }}
+                  />
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                    <div
+                      style={{
+                        width: "42px",
+                        height: "42px",
+                        borderRadius: "50%",
+                        background: "white",
+                        display: "grid",
+                        placeItems: "center",
+                        color: "var(--blue-600)",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                      }}
+                    >
+                      <Icon name="camera" size={20} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "12px", color: "var(--navy-900)" }}>
+                        {uploadingPhoto ? "Sedang Mengompres & Mengunggah..." : "Klik untuk Pilih Foto dari Laptop / HP"}
+                      </strong>
+                      <p style={{ fontSize: "10px", color: "var(--muted)", margin: "4px 0 0" }}>
+                        Format didukung: JPG, PNG, WebP (otomatis dioptimasi untuk kecepatan)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: PRESET GALLERY */}
+              {photoTab === "preset" && (
+                <div>
+                  <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px" }}>
+                    Pilih salah satu foto estetik laundry profesional di bawah:
+                  </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: "10px",
+                      maxHeight: "220px",
+                      overflowY: "auto",
+                      paddingRight: "4px",
+                    }}
+                  >
+                    {OUTLET_PHOTO_PRESETS.map((preset) => {
+                      const isChosen = selectedPhoto === preset.url;
+                      return (
+                        <div
+                          key={preset.id}
+                          onClick={() => setSelectedPhoto(preset.url)}
+                          style={{
+                            cursor: "pointer",
+                            borderRadius: "10px",
+                            overflow: "hidden",
+                            border: isChosen ? "2px solid var(--blue-600)" : "1px solid var(--line)",
+                            position: "relative",
+                            transition: "all 0.15s ease",
+                            transform: isChosen ? "scale(1.02)" : "none",
+                            boxShadow: isChosen ? "0 4px 12px rgba(8, 120, 249, 0.25)" : "none",
+                          }}
+                        >
+                          <img
+                            src={preset.url}
+                            alt={preset.label}
+                            style={{ width: "100%", height: "80px", objectFit: "cover", display: "block" }}
+                          />
+                          <div
+                            style={{
+                              padding: "4px 6px",
+                              fontSize: "9px",
+                              fontWeight: 700,
+                              background: isChosen ? "var(--blue-600)" : "white",
+                              color: isChosen ? "white" : "var(--navy-900)",
+                              textAlign: "center",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {preset.label}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: CUSTOM URL */}
+              {photoTab === "url" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--navy-900)" }}>
+                    Alamat URL Gambar Langsung
+                  </label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      type="url"
+                      value={customUrlInput}
+                      onChange={(e) => setCustomUrlInput(e.target.value)}
+                      placeholder="https://images.unsplash.com/photo-..."
+                      style={{
+                        flex: 1,
+                        padding: "9px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--line)",
+                        fontSize: "12px",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCustomUrl}
+                      style={{
+                        padding: "0 14px",
+                        background: "var(--blue-50)",
+                        color: "var(--blue-700)",
+                        border: "1px solid var(--blue-200)",
+                        borderRadius: "8px",
+                        fontWeight: 700,
+                        fontSize: "11px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Terapkan
+                    </button>
+                  </div>
+                  <span style={{ fontSize: "10px", color: "var(--muted)" }}>
+                    Paste tautan gambar yang dapat diakses publik (Unsplash, Imgur, Cloudinary, dll).
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <Button variant="secondary" onClick={() => setPhotoModalOpen(false)}>
+                Batal
+              </Button>
+              <Button onClick={handleSavePhotoModal} disabled={savingPhoto || uploadingPhoto}>
+                {savingPhoto ? "Menyimpan ke Mobile..." : "Terapkan & Simpan Foto"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL EDIT / TAMBAH LAYANAN */}
       {serviceModalOpen && (

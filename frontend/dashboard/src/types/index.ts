@@ -4,11 +4,13 @@ export type PartnerPage = "dashboard" | "pesanan" | "keuangan" | "outlet";
 export type IconName =
   | "arrow"
   | "bell"
+  | "camera"
   | "check"
   | "chevron"
   | "clock"
   | "close"
   | "home"
+  | "image"
   | "location"
   | "orders"
   | "profile"
