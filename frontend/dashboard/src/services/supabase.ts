@@ -414,21 +414,27 @@ export async function savePartnerOutlet(params: {
   address_text: string;
   operating_hours: string;
   is_active: boolean;
+  photo_url?: string;
 }): Promise<{ success: boolean; id?: string; error: string | null }> {
   if (!isSupabaseConfigured) return { success: true, error: null };
 
   try {
+    const payload: any = {
+      name: params.name,
+      address_text: params.address_text,
+      operating_hours: params.operating_hours,
+      is_active: params.is_active,
+      owner_id: params.owner_id,
+      updated_at: new Date().toISOString(),
+    };
+    if (params.photo_url !== undefined) {
+      payload.photo_url = params.photo_url;
+    }
+
     if (params.id) {
       const { error } = await supabase
         .from("laundry_outlets")
-        .update({
-          name: params.name,
-          address_text: params.address_text,
-          operating_hours: params.operating_hours,
-          is_active: params.is_active,
-          owner_id: params.owner_id,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", params.id);
 
       if (error) return { success: false, error: error.message };
@@ -436,13 +442,7 @@ export async function savePartnerOutlet(params: {
     } else {
       const { data, error } = await supabase
         .from("laundry_outlets")
-        .insert({
-          name: params.name,
-          address_text: params.address_text,
-          operating_hours: params.operating_hours,
-          is_active: params.is_active,
-          owner_id: params.owner_id,
-        })
+        .insert(payload)
         .select("id")
         .single();
 
@@ -451,6 +451,82 @@ export async function savePartnerOutlet(params: {
     }
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+export async function uploadOutletPhoto(
+  outletId: string,
+  file: File
+): Promise<{ url: string | null; error: string | null }> {
+  try {
+    // 1. Resize & compress image on canvas to max 1200x800, quality 0.82
+    const compressedDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1200;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    // 2. Try Supabase Storage if configured
+    if (isSupabaseConfigured && outletId) {
+      try {
+        const res = await fetch(compressedDataUrl);
+        const blob = await res.blob();
+        const fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const fileName = `${outletId}-${Date.now()}.${fileExt}`;
+
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from("outlet-photos")
+          .upload(fileName, blob, {
+            contentType: "image/jpeg",
+            upsert: true,
+          });
+
+        if (!uploadErr && uploadData) {
+          const { data: publicData } = supabase.storage
+            .from("outlet-photos")
+            .getPublicUrl(fileName);
+
+          if (publicData?.publicUrl) {
+            return { url: publicData.publicUrl, error: null };
+          }
+        }
+      } catch (storageErr) {
+        console.warn("Storage upload failed, falling back to data URL:", storageErr);
+      }
+    }
+
+    // 3. Fallback to compressed Data URL
+    return { url: compressedDataUrl, error: null };
+  } catch (err: any) {
+    return { url: null, error: err.message || "Gagal memproses gambar" };
   }
 }
 

@@ -10,6 +10,12 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
         <path d="M10 21h4" />
       </>
     ),
+    camera: (
+      <>
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+        <circle cx="12" cy="13" r="4" />
+      </>
+    ),
     check: <path d="m5 12 4 4L19 6" />,
     chevron: <path d="m9 18 6-6-6-6" />,
     clock: (
@@ -28,6 +34,13 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       <>
         <path d="m3 11 9-8 9 8" />
         <path d="M5 10v10h14V10M9 20v-6h6v6" />
+      </>
+    ),
+    image: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
       </>
     ),
     location: (
