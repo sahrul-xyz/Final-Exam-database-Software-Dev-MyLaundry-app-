@@ -292,7 +292,7 @@ export function PartnerDashboard({
             <Stat
               icon="wallet"
               label="Estimasi Pendapatan"
-              value={`Rp${(stats.totalRevenue > 0 ? stats.totalRevenue : 24000).toLocaleString("id-ID")}`}
+              value={`Rp${stats.totalRevenue.toLocaleString("id-ID")}`}
               trend="Berdasarkan pesanan selesai"
               tone="purple"
             />
@@ -1504,25 +1504,15 @@ function FinancialsManagement({
       status: "open" | "resolved";
       date: string;
     }[]
-  >([
-    {
-      id: "cmp-001",
-      orderNumber: orders[0]?.order_number || "#ML-240521",
-      customer: orders[0]?.customer_name || "Dinda Putri",
-      reason: "Pakaian luntur pada kemeja putih saat pencucian",
-      status: "open",
-      date: "Hari ini, 10:15 WIB",
-    },
-  ]);
+  >([]);
   const [processingPayout, setProcessingPayout] = useState(false);
 
-  // Perhitungan Keuangan Dinamis berdasarkan PRD
+  // Perhitungan Keuangan Dinamis berdasarkan pesanan selesai aktual
   const completedOrders = orders.filter((o) => o.status === "completed");
-  const totalGross =
-    completedOrders.reduce(
-      (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
-      0
-    ) || 48000;
+  const totalGross = completedOrders.reduce(
+    (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
+    0
+  );
 
   // Snapshot komisi platform: 5% (PRD Bab 9.3)
   const totalCommission = Math.round(totalGross * 0.05);
@@ -1536,11 +1526,10 @@ function FinancialsManagement({
   );
 
   const digitalCompletedOrders = completedOrders.filter((o) => o.payment_method === "digital");
-  const digitalGross =
-    digitalCompletedOrders.reduce(
-      (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
-      0
-    ) || 48000;
+  const digitalGross = digitalCompletedOrders.reduce(
+    (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
+    0
+  );
 
   const netEligible = Math.max(0, digitalGross - totalCommission - cashDebt);
 
@@ -1675,7 +1664,7 @@ function FinancialsManagement({
                   </tr>
                 ) : (
                   completedOrders.map((o) => {
-                    const amt = o.final_service_amount || o.subtotal_estimate || 24000;
+                    const amt = o.final_service_amount || o.subtotal_estimate || 0;
                     const comm = Math.round(amt * 0.05);
                     return (
                       <Fragment key={o.id}>
