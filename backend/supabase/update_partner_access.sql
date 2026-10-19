@@ -3,19 +3,13 @@
 -- File: backend/supabase/update_partner_access.sql
 -- =======================================================
 
--- 1. Berikan akses pada Mitra untuk melihat & mengelola pesanan 
---    (baik outlet milik sendiri maupun outlet default sistem yang belum diklaim)
+-- 1. Berikan akses pada Mitra untuk melihat & mengelola pesanan KHUSUS untuk outlet miliknya sendiri
 DROP POLICY IF EXISTS "Partners can view orders for their outlets" ON public.orders;
 CREATE POLICY "Partners can view orders for their outlets" ON public.orders 
 FOR SELECT USING (
     EXISTS (
         SELECT 1 FROM public.laundry_outlets o 
-        WHERE o.id = outlet_id AND (o.owner_id = auth.uid() OR o.owner_id IS NULL)
-    )
-    OR
-    EXISTS (
-        SELECT 1 FROM public.profiles p 
-        WHERE p.id = auth.uid() AND p.role = 'partner'
+        WHERE o.id = outlet_id AND o.owner_id = auth.uid()
     )
 );
 
@@ -24,12 +18,7 @@ CREATE POLICY "Partners can update orders for their outlets" ON public.orders
 FOR UPDATE USING (
     EXISTS (
         SELECT 1 FROM public.laundry_outlets lo 
-        WHERE lo.id = outlet_id AND (lo.owner_id = auth.uid() OR lo.owner_id IS NULL)
-    )
-    OR
-    EXISTS (
-        SELECT 1 FROM public.profiles p 
-        WHERE p.id = auth.uid() AND p.role = 'partner'
+        WHERE lo.id = outlet_id AND lo.owner_id = auth.uid()
     )
 );
 
@@ -43,11 +32,7 @@ FOR SELECT USING (
             o.customer_id = auth.uid() 
             OR EXISTS (
                 SELECT 1 FROM public.laundry_outlets lo 
-                WHERE lo.id = o.outlet_id AND (lo.owner_id = auth.uid() OR lo.owner_id IS NULL)
-            )
-            OR EXISTS (
-                SELECT 1 FROM public.profiles p 
-                WHERE p.id = auth.uid() AND p.role = 'partner'
+                WHERE lo.id = o.outlet_id AND lo.owner_id = auth.uid()
             )
         )
     )
@@ -61,11 +46,7 @@ FOR UPDATE USING (
         WHERE o.id = order_id AND (
             EXISTS (
                 SELECT 1 FROM public.laundry_outlets lo 
-                WHERE lo.id = o.outlet_id AND (lo.owner_id = auth.uid() OR lo.owner_id IS NULL)
-            )
-            OR EXISTS (
-                SELECT 1 FROM public.profiles p 
-                WHERE p.id = auth.uid() AND p.role = 'partner'
+                WHERE lo.id = o.outlet_id AND lo.owner_id = auth.uid()
             )
         )
     )
@@ -81,11 +62,7 @@ FOR INSERT WITH CHECK (
             o.customer_id = auth.uid() 
             OR EXISTS (
                 SELECT 1 FROM public.laundry_outlets lo 
-                WHERE lo.id = o.outlet_id AND (lo.owner_id = auth.uid() OR lo.owner_id IS NULL)
-            )
-            OR EXISTS (
-                SELECT 1 FROM public.profiles p 
-                WHERE p.id = auth.uid() AND p.role = 'partner'
+                WHERE lo.id = o.outlet_id AND lo.owner_id = auth.uid()
             )
         )
     )
@@ -100,11 +77,7 @@ FOR SELECT USING (
             o.customer_id = auth.uid() 
             OR EXISTS (
                 SELECT 1 FROM public.laundry_outlets lo 
-                WHERE lo.id = o.outlet_id AND (lo.owner_id = auth.uid() OR lo.owner_id IS NULL)
-            )
-            OR EXISTS (
-                SELECT 1 FROM public.profiles p 
-                WHERE p.id = auth.uid() AND p.role = 'partner'
+                WHERE lo.id = o.outlet_id AND lo.owner_id = auth.uid()
             )
         )
     )
