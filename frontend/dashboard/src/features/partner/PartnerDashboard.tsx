@@ -21,6 +21,8 @@ import {
   savePartnerOutlet,
   fetchPartnerServices,
   updatePartnerServicePrice,
+  savePartnerService,
+  deletePartnerService,
   PartnerServiceData,
 } from "../../services/supabase";
 
@@ -49,15 +51,19 @@ export function PartnerDashboard({
   };
 
   const loadOrders = useCallback(async () => {
+    if (!currentUser?.id) {
+      setLoadingOrders(false);
+      return;
+    }
     try {
-      const data = await fetchPartnerOrders();
+      const data = await fetchPartnerOrders(currentUser.id);
       setOrders(data);
     } catch (err) {
       console.error("Gagal memuat pesanan:", err);
     } finally {
       setLoadingOrders(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     loadOrders();
@@ -286,7 +292,7 @@ export function PartnerDashboard({
             <Stat
               icon="wallet"
               label="Estimasi Pendapatan"
-              value={`Rp${(stats.totalRevenue > 0 ? stats.totalRevenue : 24000).toLocaleString("id-ID")}`}
+              value={`Rp${stats.totalRevenue.toLocaleString("id-ID")}`}
               trend="Berdasarkan pesanan selesai"
               tone="purple"
             />
@@ -980,20 +986,29 @@ function OutletManagement({
   currentUser?: UserProfile | null;
 }) {
   const [outletId, setOutletId] = useState<string>("");
-  const [name, setName] = useState<string>("Sahrul Laundry Setiabudi");
-  const [address, setAddress] = useState<string>("Jl. Dr. Setiabudi No. 156, Bandung");
+  const [name, setName] = useState<string>("");
+  const [address, setAddress] = useState<string>("");
   const [hours, setHours] = useState<string>("08.00 – 20.00");
   const [isActive, setIsActive] = useState<boolean>(true);
   const [services, setServices] = useState<PartnerServiceData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
-  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const [newPrice, setNewPrice] = useState<string>("");
+
+  // Modal Kelola Layanan & Tarif
+  const [serviceModalOpen, setServiceModalOpen] = useState<boolean>(false);
+  const [editingService, setEditingService] = useState<PartnerServiceData | null>(null);
+  const [serviceForm, setServiceForm] = useState({
+    name: "",
+    price: "8000",
+    pricing_type: "per_kg",
+    estimated_duration_hours: "24",
+  });
+  const [savingService, setSavingService] = useState<boolean>(false);
 
   useEffect(() => {
     if (!currentUser?.id) return;
     setLoading(true);
-    fetchPartnerOutlet(currentUser.id).then((out) => {
+    fetchPartnerOutlet(currentUser.id, currentUser.fullName).then((out) => {
       if (out) {
         setOutletId(out.id);
         setName(out.name);
@@ -1009,7 +1024,7 @@ function OutletManagement({
         setLoading(false);
       }
     });
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.fullName]);
 
   const handleSave = async () => {
     if (!currentUser?.id) {
@@ -1035,21 +1050,82 @@ function OutletManagement({
     }
   };
 
-  const handleSavePrice = async (serviceId: string) => {
-    const p = parseFloat(newPrice);
-    if (isNaN(p) || p <= 0) {
-      alert("Masukkan harga yang valid!");
+  const handleOpenAddService = () => {
+    setEditingService(null);
+    setServiceForm({
+      name: "",
+      price: "8000",
+      pricing_type: "per_kg",
+      estimated_duration_hours: "24",
+    });
+    setServiceModalOpen(true);
+  };
+
+  const handleOpenEditService = (service: PartnerServiceData) => {
+    setEditingService(service);
+    setServiceForm({
+      name: service.name,
+      price: String(service.price),
+      pricing_type: service.pricing_type || "per_kg",
+      estimated_duration_hours: String(service.estimated_duration_hours || 24),
+    });
+    setServiceModalOpen(true);
+  };
+
+  const handleSaveServiceForm = async () => {
+    if (!outletId) {
+      notify("Outlet belum tersedia. Mohon simpan profil outlet terlebih dahulu.");
       return;
     }
-    const res = await updatePartnerServicePrice(serviceId, p);
+    if (!serviceForm.name.trim()) {
+      notify("Nama layanan tidak boleh kosong.");
+      return;
+    }
+    const priceNum = parseFloat(serviceForm.price);
+    if (isNaN(priceNum) || priceNum < 0) {
+      notify("Tarif harga tidak valid.");
+      return;
+    }
+    const durHours = parseInt(serviceForm.estimated_duration_hours) || 24;
+
+    setSavingService(true);
+    const res = await savePartnerService({
+      id: editingService?.id,
+      outlet_id: outletId,
+      name: serviceForm.name.trim(),
+      price: priceNum,
+      pricing_type: serviceForm.pricing_type,
+      estimated_duration_hours: durHours,
+    });
+    setSavingService(false);
+
     if (res.success) {
-      setServices((prev) =>
-        prev.map((s) => (s.id === serviceId ? { ...s, price: p } : s))
+      setServiceModalOpen(false);
+      notify(
+        editingService
+          ? `Layanan '${serviceForm.name}' berhasil diperbarui!`
+          : `Layanan '${serviceForm.name}' berhasil ditambahkan!`
       );
-      setEditingServiceId(null);
-      notify("Tarif layanan berhasil diperbarui!");
+      // Reload daftar layanan terbaru
+      const updatedSrvs = await fetchPartnerServices(outletId);
+      setServices(updatedSrvs);
     } else {
-      notify(`Gagal mengubah tarif: ${res.error}`);
+      notify(`Gagal menyimpan layanan: ${res.error}`);
+    }
+  };
+
+  const handleDeleteService = async (service: PartnerServiceData) => {
+    const confirmDelete = window.confirm(
+      `Apakah Anda yakin ingin menghapus layanan '${service.name}'?`
+    );
+    if (!confirmDelete) return;
+
+    const res = await deletePartnerService(service.id);
+    if (res.success) {
+      setServices((prev) => prev.filter((s) => s.id !== service.id));
+      notify(`Layanan '${service.name}' berhasil dihapus.`);
+    } else {
+      notify(`Gagal menghapus layanan: ${res.error}`);
     }
   };
 
@@ -1147,45 +1223,252 @@ function OutletManagement({
       </section>
 
       <section className="panel services-panel">
-        <PanelTitle
-          title="Daftar Layanan & Tarif"
-          subtitle="Tarif per kilogram yang dilihat pelanggan"
-        />
-        {services.map((service) => (
-          <div className="managed-service" key={service.id}>
-            <div>
-              <strong>{service.name}</strong>
-              <small>{service.estimated_duration_hours} jam pengerjaan</small>
-            </div>
-            {editingServiceId === service.id ? (
-              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <input
-                  type="number"
-                  value={newPrice}
-                  onChange={(e) => setNewPrice(e.target.value)}
-                  style={{ width: "80px", height: "30px", padding: "0 6px", fontSize: "11px", borderRadius: "6px", border: "1px solid var(--blue-500)" }}
-                  placeholder="Rp"
-                />
-                <button type="button" onClick={() => handleSavePrice(service.id)}>Simpan</button>
-                <button type="button" onClick={() => setEditingServiceId(null)}>Batal</button>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "18px 20px 10px 20px",
+            borderBottom: "1px solid var(--line)",
+          }}
+        >
+          <div>
+            <span className="eyebrow" style={{ color: "var(--blue-600)" }}>LAYANAN & HARGA</span>
+            <h3 style={{ fontSize: "15px", color: "var(--navy-900)", margin: "2px 0 0" }}>
+              Daftar Layanan & Tarif
+            </h3>
+            <p style={{ fontSize: "11px", color: "var(--muted)", margin: "2px 0 0" }}>
+              Tarif yang dilihat dan dipesan oleh pelanggan di aplikasi mobile
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenAddService}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "var(--blue-600)",
+              color: "#ffffff",
+              border: 0,
+              padding: "7px 12px",
+              borderRadius: "8px",
+              fontWeight: 700,
+              fontSize: "11px",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(8, 120, 249, 0.22)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>+</span> Tambah Layanan
+          </button>
+        </div>
+
+        {services.length === 0 ? (
+          <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)", fontSize: "12px" }}>
+            Belum ada layanan yang ditambahkan. Klik <strong>+ Tambah Layanan</strong> untuk menambahkan layanan baru.
+          </div>
+        ) : (
+          services.map((service) => (
+            <div
+              className="managed-service"
+              key={service.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "14px 20px",
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <strong style={{ fontSize: "13px", color: "var(--navy-900)" }}>
+                  {service.name}
+                </strong>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "4px" }}>
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      color: "var(--blue-800)",
+                      background: "var(--blue-50)",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⏱️ {service.estimated_duration_hours} jam pengerjaan
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      color: "#475569",
+                      background: "#f1f5f9",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    ⚖️ {service.pricing_type === "per_item" ? "Per Satuan / Pcs" : "Per Kilogram"}
+                  </span>
+                </div>
               </div>
-            ) : (
-              <>
-                <b>Rp{service.price.toLocaleString("id-ID")} /kg</b>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <b style={{ fontSize: "13px", color: "var(--blue-700)", fontWeight: 800 }}>
+                  Rp{service.price.toLocaleString("id-ID")}
+                  <small style={{ fontSize: "10px", fontWeight: 500, color: "var(--muted)", marginLeft: "2px" }}>
+                    {service.pricing_type === "per_item" ? "/pcs" : "/kg"}
+                  </small>
+                </b>
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingServiceId(service.id);
-                    setNewPrice(String(service.price));
+                  onClick={() => handleOpenEditService(service)}
+                  style={{
+                    background: "var(--blue-50)",
+                    color: "var(--blue-700)",
+                    border: "1px solid var(--blue-100)",
+                    borderRadius: "7px",
+                    padding: "5px 10px",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
                   }}
                 >
-                  Ubah Tarif
+                  Ubah
                 </button>
-              </>
-            )}
-          </div>
-        ))}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteService(service)}
+                  title="Hapus Layanan"
+                  style={{
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    border: "1px solid #fee2e2",
+                    borderRadius: "7px",
+                    padding: "5px 8px",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </section>
+
+      {/* MODAL EDIT / TAMBAH LAYANAN */}
+      {serviceModalOpen && (
+        <div className="modal-backdrop" onClick={() => setServiceModalOpen(false)}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <span className="eyebrow">
+                  {editingService ? "EDIT LAYANAN" : "LAYANAN BARU"}
+                </span>
+                <h3>{editingService ? `Edit ${editingService.name}` : "Tambah Layanan Baru"}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setServiceModalOpen(false)}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: "var(--muted)",
+                }}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "12px", fontWeight: 600 }}>
+                Nama Layanan
+                <input
+                  type="text"
+                  value={serviceForm.name}
+                  onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                  placeholder="Contoh: Cuci + Setrika, Bedcover, Sepatu..."
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--line)",
+                    fontSize: "12px",
+                  }}
+                />
+              </label>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "12px", fontWeight: 600 }}>
+                  Tarif / Harga (Rp)
+                  <input
+                    type="number"
+                    value={serviceForm.price}
+                    onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
+                    placeholder="Contoh: 8000"
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--line)",
+                      fontSize: "12px",
+                    }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "12px", fontWeight: 600 }}>
+                  Satuan Perhitungan
+                  <select
+                    value={serviceForm.pricing_type}
+                    onChange={(e) => setServiceForm({ ...serviceForm, pricing_type: e.target.value })}
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--line)",
+                      fontSize: "12px",
+                      background: "white",
+                    }}
+                  >
+                    <option value="per_kg">Per Kilogram (kg)</option>
+                    <option value="per_item">Per Satuan / Pcs</option>
+                  </select>
+                </label>
+              </div>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "12px", fontWeight: 600 }}>
+                Estimasi Durasi Pengerjaan (Jam)
+                <input
+                  type="number"
+                  value={serviceForm.estimated_duration_hours}
+                  onChange={(e) =>
+                    setServiceForm({ ...serviceForm, estimated_duration_hours: e.target.value })
+                  }
+                  placeholder="Contoh: 24 (1 hari) atau 48 (2 hari)"
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--line)",
+                    fontSize: "12px",
+                  }}
+                />
+                <span style={{ fontSize: "10px", color: "var(--muted)", fontWeight: "normal" }}>
+                  Waktu estimasi pengerjaan yang akan diinfokan ke pelanggan saat memesan.
+                </span>
+              </label>
+            </div>
+
+            <div className="modal-footer">
+              <Button variant="secondary" onClick={() => setServiceModalOpen(false)}>
+                Batal
+              </Button>
+              <Button onClick={handleSaveServiceForm} disabled={savingService}>
+                {savingService ? "Menyimpan..." : "Simpan Layanan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1221,25 +1504,15 @@ function FinancialsManagement({
       status: "open" | "resolved";
       date: string;
     }[]
-  >([
-    {
-      id: "cmp-001",
-      orderNumber: orders[0]?.order_number || "#ML-240521",
-      customer: orders[0]?.customer_name || "Dinda Putri",
-      reason: "Pakaian luntur pada kemeja putih saat pencucian",
-      status: "open",
-      date: "Hari ini, 10:15 WIB",
-    },
-  ]);
+  >([]);
   const [processingPayout, setProcessingPayout] = useState(false);
 
-  // Perhitungan Keuangan Dinamis berdasarkan PRD
+  // Perhitungan Keuangan Dinamis berdasarkan pesanan selesai aktual
   const completedOrders = orders.filter((o) => o.status === "completed");
-  const totalGross =
-    completedOrders.reduce(
-      (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
-      0
-    ) || 48000;
+  const totalGross = completedOrders.reduce(
+    (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
+    0
+  );
 
   // Snapshot komisi platform: 5% (PRD Bab 9.3)
   const totalCommission = Math.round(totalGross * 0.05);
@@ -1253,11 +1526,10 @@ function FinancialsManagement({
   );
 
   const digitalCompletedOrders = completedOrders.filter((o) => o.payment_method === "digital");
-  const digitalGross =
-    digitalCompletedOrders.reduce(
-      (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
-      0
-    ) || 48000;
+  const digitalGross = digitalCompletedOrders.reduce(
+    (sum, o) => sum + (o.final_service_amount || o.subtotal_estimate || 0),
+    0
+  );
 
   const netEligible = Math.max(0, digitalGross - totalCommission - cashDebt);
 
@@ -1392,7 +1664,7 @@ function FinancialsManagement({
                   </tr>
                 ) : (
                   completedOrders.map((o) => {
-                    const amt = o.final_service_amount || o.subtotal_estimate || 24000;
+                    const amt = o.final_service_amount || o.subtotal_estimate || 0;
                     const comm = Math.round(amt * 0.05);
                     return (
                       <Fragment key={o.id}>
