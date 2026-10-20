@@ -13,8 +13,13 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
+import { NotificationHistoryScreen } from "./src/screens/NotificationHistoryScreen";
 import { OrderModal } from "./src/components/OrderModal";
+
 import { MapScreen } from "./src/screens/MapScreen";
+=======
+import { OrderNotifBanner } from "./src/components/OrderNotifBanner";
+
 import { Outlet, TabName, UserProfile } from "./src/types";
 import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
 
@@ -25,6 +30,12 @@ export default function App() {
   const [mapVisible, setMapVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const goTab = (tab: TabName) => {
+    setShowNotifications(false);
+    setActiveTab(tab);
+  };
 
   useEffect(() => {
     getCurrentCustomer().then((user) => {
@@ -37,6 +48,7 @@ export default function App() {
 
   const handleLogout = async () => {
     await signOutCustomer();
+    setShowNotifications(false);
     setCurrentUser(null);
   };
 
@@ -65,6 +77,7 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor="#edf7ff" />
 
       <View style={styles.screenContainer}>
+
         {activeTab === "beranda" && (
           <HomeScreen
             onSelectOutlet={(outlet) => {
@@ -84,7 +97,37 @@ export default function App() {
               email: currentUser.email,
             }}
             onLogout={handleLogout}
+
+        {showNotifications ? (
+          <NotificationHistoryScreen
+            customerId={currentUser.id}
+            onBack={() => setShowNotifications(false)}
+
           />
+        ) : (
+          <>
+            {activeTab === "beranda" && (
+              <HomeScreen
+                onSelectOutlet={(outlet) => {
+                  setSelectedOutlet(outlet);
+                  setOrderModalVisible(true);
+                }}
+                onOpenNotifications={() => setShowNotifications(true)}
+              />
+            )}
+            {activeTab === "pesanan" && (
+              <OrdersScreen customerId={currentUser.id} />
+            )}
+            {activeTab === "profil" && (
+              <ProfileScreen
+                user={{
+                  fullName: currentUser.fullName,
+                  email: currentUser.email,
+                }}
+                onLogout={handleLogout}
+              />
+            )}
+          </>
         )}
       </View>
 
@@ -92,7 +135,7 @@ export default function App() {
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab("beranda")}
+          onPress={() => goTab("beranda")}
           activeOpacity={0.7}
         >
           <Text
@@ -115,7 +158,7 @@ export default function App() {
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab("pesanan")}
+          onPress={() => goTab("pesanan")}
           activeOpacity={0.7}
         >
           <View style={{ position: "relative" }}>
@@ -141,7 +184,7 @@ export default function App() {
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab("profil")}
+          onPress={() => goTab("profil")}
           activeOpacity={0.7}
         >
           <Text
@@ -175,7 +218,8 @@ export default function App() {
         }}
       />
 
-      {/* Popup Peta Outlet (Google Maps) - overlay di atas halaman */}
+
+
       <Modal
         visible={mapVisible}
         animationType="fade"
@@ -193,6 +237,13 @@ export default function App() {
           }}
         />
       </Modal>
+
+      {/* Banner notif status pesanan (tap = buka Riwayat Notifikasi) */}
+      <OrderNotifBanner
+        customerId={currentUser.id}
+        onOpen={() => setShowNotifications(true)}
+      />
+
     </SafeAreaView>
   );
 }

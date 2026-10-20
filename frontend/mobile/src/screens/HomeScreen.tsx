@@ -15,10 +15,17 @@ import { Outlet } from "../types";
 
 export function HomeScreen({
   onSelectOutlet,
+
   onOpenMap,
 }: {
   onSelectOutlet?: (outlet: Outlet) => void;
   onOpenMap?: () => void;
+=======
+  onOpenNotifications,
+}: {
+  onSelectOutlet?: (outlet: Outlet) => void;
+  onOpenNotifications?: () => void;
+
 }) {
   const [outlets, setOutlets] = useState<Outlet[]>(fallbackOutlets);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +57,7 @@ export function HomeScreen({
         <RefreshControl refreshing={refreshing} onRefresh={loadData} />
       }
     >
-      <Header />
+      <Header onNotificationPress={onOpenNotifications} />
 
       <View style={styles.welcomeSection}>
         <Text style={styles.greeting}>Selamat pagi,</Text>
