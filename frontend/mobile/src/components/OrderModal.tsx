@@ -15,12 +15,33 @@ import {
   HandoverMethod,
   PaymentMethod,
   CustomerOrder,
+  ServiceCategory,
 } from "../types";
 import {
   fetchOutletServices,
   createCustomerOrder,
   confirmDigitalPaymentSimulation,
+  getLiveOutlets,
 } from "../services/supabase";
+
+const CATEGORY_LABEL: Record<ServiceCategory, string> = {
+  kiloan: "Cuci Kiloan",
+  express: "Express",
+  satuan: "Satuan",
+};
+
+function isExpress(s: LaundryServiceItem) {
+  const name = s.name.toLowerCase();
+  return (
+    name.includes("express") || name.includes("kilat") || s.durationHours <= 12
+  );
+}
+
+function matchesCategory(s: LaundryServiceItem, c: ServiceCategory) {
+  if (c === "satuan") return s.pricingType === "per_item";
+  if (c === "express") return s.pricingType !== "per_item" && isExpress(s);
+  return s.pricingType !== "per_item" && !isExpress(s); // kiloan
+}
 
 export function OrderModal({
   visible,
@@ -28,12 +49,14 @@ export function OrderModal({
   customerId,
   onClose,
   onOrderSuccess,
+  initialCategory,
 }: {
   visible: boolean;
   outlet: Outlet | null;
   customerId: string;
   onClose: () => void;
   onOrderSuccess: (order: CustomerOrder) => void;
+  initialCategory?: ServiceCategory;
 }) {
   const [step, setStep] = useState<"form" | "payment">("form");
   const [createdOrder, setCreatedOrder] = useState<CustomerOrder | null>(null);
@@ -48,28 +71,39 @@ export function OrderModal({
   const [submitting, setSubmitting] = useState(false);
   const [simulatingPay, setSimulatingPay] = useState(false);
   const [paymentTimer, setPaymentTimer] = useState(15 * 60);
+  const [currentOutlet, setCurrentOutlet] = useState<Outlet | null>(outlet);
+  const [showOutletPicker, setShowOutletPicker] = useState(false);
+  const [outletOptions, setOutletOptions] = useState<Outlet[]>([]);
+  const [loadingOutlets, setLoadingOutlets] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setStep("form");
       setCreatedOrder(null);
       setPaymentTimer(15 * 60);
+      setCurrentOutlet(outlet);
+      setShowOutletPicker(false);
     }
-  }, [visible]);
+  }, [visible, outlet]);
 
   useEffect(() => {
-    if (outlet && visible) {
+    if (currentOutlet && visible) {
       setLoadingServices(true);
-      fetchOutletServices(outlet.id)
+      fetchOutletServices(currentOutlet.id)
         .then((items) => {
-          setServices(items);
-          if (items.length > 0) {
-            setSelectedService(items[0]);
+          let list = items;
+          if (initialCategory) {
+            const filtered = items.filter((s) =>
+              matchesCategory(s, initialCategory)
+            );
+            if (filtered.length > 0) list = filtered; // jika tidak ada yang cocok, tampilkan semua
           }
+          setServices(list);
+          setSelectedService(list[0] ?? null);
         })
         .finally(() => setLoadingServices(false));
     }
-  }, [outlet, visible]);
+  }, [currentOutlet, visible, initialCategory]);
 
   // Countdown timer 15 menit untuk layar pembayaran simulasi
   useEffect(() => {
@@ -80,7 +114,26 @@ export function OrderModal({
     return () => clearInterval(interval);
   }, [step]);
 
-  if (!outlet) return null;
+  if (!currentOutlet) return null;
+
+  const handleTogglePicker = async () => {
+    const next = !showOutletPicker;
+    setShowOutletPicker(next);
+    if (next && outletOptions.length === 0) {
+      setLoadingOutlets(true);
+      try {
+        const data = await getLiveOutlets();
+        setOutletOptions(data);
+      } finally {
+        setLoadingOutlets(false);
+      }
+    }
+  };
+
+  const handlePickOutlet = (o: Outlet) => {
+    setCurrentOutlet(o);
+    setShowOutletPicker(false);
+  };
 
   const unitPrice = selectedService ? selectedService.price : 0;
   const unitLabel = selectedService?.pricingType === "per_item" ? "item" : "kg";
@@ -94,15 +147,18 @@ export function OrderModal({
 
   const handleCreateOrder = async () => {
     if (!selectedService) {
-      Alert.alert("Perhatian", "Silakan pilih layanan laundry terlebih dahulu.");
+      Alert.alert(
+        "Perhatian",
+        "Silakan pilih layanan laundry terlebih dahulu."
+      );
       return;
     }
 
     setSubmitting(true);
     const { order, error } = await createCustomerOrder({
       customerId,
-      outletId: outlet.id,
-      outletName: outlet.name,
+      outletId: currentOutlet.id,
+      outletName: currentOutlet.name,
       service: selectedService,
       quantity,
       handoverMethod,
@@ -210,7 +266,9 @@ export function OrderModal({
                 </View>
                 <View style={styles.qrisBox}>
                   <Text style={{ fontSize: 40, marginBottom: 6 }}>📱</Text>
-                  <Text style={styles.qrisPatternText}>[ SIMULASI QR CODE ]</Text>
+                  <Text style={styles.qrisPatternText}>
+                    [ SIMULASI QR CODE ]
+                  </Text>
                   <Text style={styles.qrisSubtext}>MyLaundry Instant Pay</Text>
                 </View>
                 <Text style={styles.qrisFooter}>
@@ -228,7 +286,10 @@ export function OrderModal({
                   <TouchableOpacity
                     style={styles.copyBtn}
                     onPress={() =>
-                      Alert.alert("Tersalin", "Nomor Virtual Account berhasil disalin.")
+                      Alert.alert(
+                        "Tersalin",
+                        "Nomor Virtual Account berhasil disalin."
+                      )
                     }
                   >
                     <Text style={styles.copyBtnText}>Salin</Text>
@@ -238,9 +299,12 @@ export function OrderModal({
 
               {/* Catatan Simulasi Testing */}
               <View style={styles.testNoteBox}>
-                <Text style={styles.testNoteTitle}>⚡ Area Simulasi Testing</Text>
+                <Text style={styles.testNoteTitle}>
+                  ⚡ Area Simulasi Testing
+                </Text>
                 <Text style={styles.testNoteText}>
-                  Dalam mode pengujian ini, klik tombol di bawah untuk mensimulasikan notifikasi sukses pembayaran secara langsung.
+                  Dalam mode pengujian ini, klik tombol di bawah untuk
+                  mensimulasikan notifikasi sukses pembayaran secara langsung.
                 </Text>
               </View>
 
@@ -274,209 +338,264 @@ export function OrderModal({
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollBody}
             >
-            {/* Outlet Header */}
-            <View style={styles.outletHeader}>
-              <View style={styles.outletBadge}>
-                <Text style={styles.outletBadgeEmoji}>🧺</Text>
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.outletName}>{outlet.name}</Text>
-                <Text style={styles.outletAddress}>{outlet.address}</Text>
-              </View>
-            </View>
-
-            {/* Section: Pilih Layanan */}
-            <Text style={styles.sectionTitle}>1. PILIH LAYANAN</Text>
-            {loadingServices ? (
-              <ActivityIndicator
-                size="small"
-                color="#0878f9"
-                style={{ marginVertical: 14 }}
-              />
-            ) : (
-              <View style={styles.serviceList}>
-                {services.map((srv) => {
-                  const isSelected = selectedService?.id === srv.id;
-                  return (
-                    <TouchableOpacity
-                      key={srv.id}
-                      style={[
-                        styles.serviceOption,
-                        isSelected && styles.serviceOptionActive,
-                      ]}
-                      onPress={() => setSelectedService(srv)}
-                      activeOpacity={0.8}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[
-                            styles.serviceName,
-                            isSelected && styles.serviceNameActive,
-                          ]}
-                        >
-                          {srv.name}
-                        </Text>
-                        <Text style={styles.serviceEta}>
-                          Estimasi: {srv.durationHours} jam
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.servicePrice,
-                          isSelected && styles.servicePriceActive,
-                        ]}
-                      >
-                        Rp{srv.price.toLocaleString("id-ID")} /{unitLabel}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-
-            {/* Section: Estimasi Berat / Kuantitas */}
-            <Text style={styles.sectionTitle}>
-              2. ESTIMASI JUMLAH ({unitLabel.toUpperCase()})
-            </Text>
-            <View style={styles.stepperContainer}>
-              <Text style={styles.stepperHint}>
-                Berapa perkiraan {unitLabel} pakaian Anda?
-              </Text>
-              <View style={styles.stepperRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.stepperBtn,
-                    quantity <= 1 && styles.stepperBtnDisabled,
-                  ]}
-                  onPress={() => setQuantity(Math.max(1, quantity - 1))}
-                  disabled={quantity <= 1}
-                >
-                  <Text style={styles.stepperBtnText}>−</Text>
-                </TouchableOpacity>
-                <View style={styles.stepperValueBox}>
-                  <Text style={styles.stepperValue}>{quantity}</Text>
-                  <Text style={styles.stepperUnit}>{unitLabel}</Text>
+              {/* Outlet Header */}
+              <View style={styles.outletHeader}>
+                <View style={styles.outletBadge}>
+                  <Text style={styles.outletBadgeEmoji}>🧺</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.outletName}>{currentOutlet.name}</Text>
+                  <Text style={styles.outletAddress}>
+                    {currentOutlet.address || "Alamat belum diatur"}
+                  </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.stepperBtn}
-                  onPress={() => setQuantity(quantity + 1)}
+                  style={styles.changeBtn}
+                  onPress={handleTogglePicker}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.stepperBtnText}>+</Text>
+                  <Text style={styles.changeBtnText}>
+                    {showOutletPicker ? "Tutup" : "Ganti"}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.weightNote}>
-                * Berat aktual akan ditimbang ulang secara akurat oleh mitra saat
-                pakaian diterima.
-              </Text>
-            </View>
 
-            {/* Section: Metode Penyerahan */}
-            <Text style={styles.sectionTitle}>3. METODE PENYERAHAN</Text>
-            <View style={styles.optionRow}>
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  handoverMethod === "pickup_delivery" &&
-                    styles.optionCardActive,
-                ]}
-                onPress={() => setHandoverMethod("pickup_delivery")}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.optionEmoji}>🛵</Text>
-                <Text style={styles.optionTitle}>Antar-Jemput</Text>
-                <Text style={styles.optionSub}>Kurir jemput pakaian</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  handoverMethod === "drop_off" && styles.optionCardActive,
-                ]}
-                onPress={() => setHandoverMethod("drop_off")}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.optionEmoji}>🏪</Text>
-                <Text style={styles.optionTitle}>Drop-Off</Text>
-                <Text style={styles.optionSub}>Antar sendiri ke outlet</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Section: Metode Pembayaran */}
-            <Text style={styles.sectionTitle}>4. METODE PEMBAYARAN</Text>
-            <View style={styles.optionRow}>
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  paymentMethod === "digital" && styles.optionCardActive,
-                ]}
-                onPress={() => setPaymentMethod("digital")}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.optionEmoji}>📱</Text>
-                <Text style={styles.optionTitle}>Digital (Simulasi)</Text>
-                <Text style={styles.optionSub}>QRIS / E-Wallet</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  paymentMethod === "cash" && styles.optionCardActive,
-                ]}
-                onPress={() => setPaymentMethod("cash")}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.optionEmoji}>💵</Text>
-                <Text style={styles.optionTitle}>Tunai</Text>
-                <Text style={styles.optionSub}>Bayar saat serah terima</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Ringkasan Estimasi Biaya */}
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>
-                  {selectedService?.name || "Layanan"} ({quantity} {unitLabel})
-                </Text>
-                <Text style={styles.summaryVal}>
-                  Rp{totalEstimate.toLocaleString("id-ID")}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Metode</Text>
-                <Text style={styles.summaryVal}>
-                  {handoverMethod === "pickup_delivery"
-                    ? "Antar-Jemput"
-                    : "Drop-Off"}
-                </Text>
-              </View>
-              <View style={[styles.summaryRow, styles.summaryTotalRow]}>
-                <Text style={styles.totalLabel}>Total Estimasi Biaya</Text>
-                <Text style={styles.totalVal}>
-                  Rp{totalEstimate.toLocaleString("id-ID")}
-                </Text>
-              </View>
-            </View>
-
-            {/* Tombol Aksi */}
-            <TouchableOpacity
-              style={styles.submitBtn}
-              onPress={handleCreateOrder}
-              disabled={submitting}
-              activeOpacity={0.85}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <Text style={styles.submitBtnText}>
-                  Konfirmasi & Buat Pesanan
-                </Text>
+              {showOutletPicker && (
+                <View style={styles.pickerBox}>
+                  {loadingOutlets ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#0878f9"
+                      style={{ marginVertical: 12 }}
+                    />
+                  ) : (
+                    outletOptions.map((o) => {
+                      const active = o.id === currentOutlet.id;
+                      return (
+                        <TouchableOpacity
+                          key={o.id}
+                          style={[
+                            styles.pickerItem,
+                            active && styles.pickerItemActive,
+                          ]}
+                          onPress={() => handlePickOutlet(o)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.pickerName,
+                              active && styles.pickerNameActive,
+                            ]}
+                          >
+                            {o.name}
+                          </Text>
+                          <Text style={styles.pickerSub} numberOfLines={1}>
+                            {o.distance} • {o.address}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </View>
               )}
-            </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelBtnText}>Batal</Text>
-            </TouchableOpacity>
-          </ScrollView>
+              {/* Section: Pilih Layanan */}
+              <Text style={styles.sectionTitle}>
+                {initialCategory
+                  ? `1. LAYANAN: ${CATEGORY_LABEL[initialCategory].toUpperCase()}`
+                  : "1. PILIH LAYANAN"}
+              </Text>
+              {loadingServices ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#0878f9"
+                  style={{ marginVertical: 14 }}
+                />
+              ) : (
+                <View style={styles.serviceList}>
+                  {services.map((srv) => {
+                    const isSelected = selectedService?.id === srv.id;
+                    return (
+                      <TouchableOpacity
+                        key={srv.id}
+                        style={[
+                          styles.serviceOption,
+                          isSelected && styles.serviceOptionActive,
+                        ]}
+                        onPress={() => setSelectedService(srv)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.serviceName,
+                              isSelected && styles.serviceNameActive,
+                            ]}
+                          >
+                            {srv.name}
+                          </Text>
+                          <Text style={styles.serviceEta}>
+                            Estimasi: {srv.durationHours} jam
+                          </Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.servicePrice,
+                            isSelected && styles.servicePriceActive,
+                          ]}
+                        >
+                          Rp{srv.price.toLocaleString("id-ID")} /{unitLabel}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Section: Estimasi Berat / Kuantitas */}
+              <Text style={styles.sectionTitle}>
+                2. ESTIMASI JUMLAH ({unitLabel.toUpperCase()})
+              </Text>
+              <View style={styles.stepperContainer}>
+                <Text style={styles.stepperHint}>
+                  Berapa perkiraan {unitLabel} pakaian Anda?
+                </Text>
+                <View style={styles.stepperRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.stepperBtn,
+                      quantity <= 1 && styles.stepperBtnDisabled,
+                    ]}
+                    onPress={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1}
+                  >
+                    <Text style={styles.stepperBtnText}>−</Text>
+                  </TouchableOpacity>
+                  <View style={styles.stepperValueBox}>
+                    <Text style={styles.stepperValue}>{quantity}</Text>
+                    <Text style={styles.stepperUnit}>{unitLabel}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() => setQuantity(quantity + 1)}
+                  >
+                    <Text style={styles.stepperBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.weightNote}>
+                  * Berat aktual akan ditimbang ulang secara akurat oleh mitra
+                  saat pakaian diterima.
+                </Text>
+              </View>
+
+              {/* Section: Metode Penyerahan */}
+              <Text style={styles.sectionTitle}>3. METODE PENYERAHAN</Text>
+              <View style={styles.optionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.optionCard,
+                    handoverMethod === "pickup_delivery" &&
+                      styles.optionCardActive,
+                  ]}
+                  onPress={() => setHandoverMethod("pickup_delivery")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.optionEmoji}>🛵</Text>
+                  <Text style={styles.optionTitle}>Antar-Jemput</Text>
+                  <Text style={styles.optionSub}>Kurir jemput pakaian</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.optionCard,
+                    handoverMethod === "drop_off" && styles.optionCardActive,
+                  ]}
+                  onPress={() => setHandoverMethod("drop_off")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.optionEmoji}>🏪</Text>
+                  <Text style={styles.optionTitle}>Drop-Off</Text>
+                  <Text style={styles.optionSub}>Antar sendiri ke outlet</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Section: Metode Pembayaran */}
+              <Text style={styles.sectionTitle}>4. METODE PEMBAYARAN</Text>
+              <View style={styles.optionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.optionCard,
+                    paymentMethod === "digital" && styles.optionCardActive,
+                  ]}
+                  onPress={() => setPaymentMethod("digital")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.optionEmoji}>📱</Text>
+                  <Text style={styles.optionTitle}>Digital (Simulasi)</Text>
+                  <Text style={styles.optionSub}>QRIS / E-Wallet</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.optionCard,
+                    paymentMethod === "cash" && styles.optionCardActive,
+                  ]}
+                  onPress={() => setPaymentMethod("cash")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.optionEmoji}>💵</Text>
+                  <Text style={styles.optionTitle}>Tunai</Text>
+                  <Text style={styles.optionSub}>Bayar saat serah terima</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Ringkasan Estimasi Biaya */}
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>
+                    {selectedService?.name || "Layanan"} ({quantity} {unitLabel}
+                    )
+                  </Text>
+                  <Text style={styles.summaryVal}>
+                    Rp{totalEstimate.toLocaleString("id-ID")}
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Metode</Text>
+                  <Text style={styles.summaryVal}>
+                    {handoverMethod === "pickup_delivery"
+                      ? "Antar-Jemput"
+                      : "Drop-Off"}
+                  </Text>
+                </View>
+                <View style={[styles.summaryRow, styles.summaryTotalRow]}>
+                  <Text style={styles.totalLabel}>Total Estimasi Biaya</Text>
+                  <Text style={styles.totalVal}>
+                    Rp{totalEstimate.toLocaleString("id-ID")}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Tombol Aksi */}
+              <TouchableOpacity
+                style={styles.submitBtn}
+                onPress={handleCreateOrder}
+                disabled={submitting}
+                activeOpacity={0.85}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.submitBtnText}>
+                    Konfirmasi & Buat Pesanan
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+                <Text style={styles.cancelBtnText}>Batal</Text>
+              </TouchableOpacity>
+            </ScrollView>
           )}
         </View>
       </View>
@@ -538,6 +657,49 @@ const styles = StyleSheet.create({
   outletAddress: {
     fontSize: 11,
     color: "#64748b",
+    marginTop: 2,
+  },
+  changeBtn: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+  changeBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0878f9",
+  },
+  pickerBox: {
+    marginTop: -10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  pickerItem: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+  },
+  pickerItemActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#2493ff",
+  },
+  pickerName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  pickerNameActive: {
+    color: "#0878f9",
+  },
+  pickerSub: {
+    fontSize: 11,
+    color: "#94a3b8",
     marginTop: 2,
   },
   sectionTitle: {
