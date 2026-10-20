@@ -257,7 +257,7 @@ export async function createCustomerOrder(params: {
 
     const newOrder: CustomerOrder = {
       id: orderId,
-      orderNumber,
+      orderNumber: finalOrderNumber,
       outletId: params.outletId,
       outletName: params.outletName,
       status: initialStatus,
@@ -266,7 +266,7 @@ export async function createCustomerOrder(params: {
       paymentMethod: params.paymentMethod,
       paymentStatus: "pending",
       serviceDate,
-      createdAt: orderData.created_at || new Date().toISOString(),
+      createdAt: finalCreatedAt,
       items: [
         {
           serviceName: params.service.name,
