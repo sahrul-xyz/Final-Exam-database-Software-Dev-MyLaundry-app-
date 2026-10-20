@@ -16,12 +16,15 @@ import { AuthScreen } from "./src/screens/AuthScreen";
 import { NotificationHistoryScreen } from "./src/screens/NotificationHistoryScreen";
 import { OrderModal } from "./src/components/OrderModal";
 import { OrderNotifBanner } from "./src/components/OrderNotifBanner";
-import { Outlet, TabName, UserProfile } from "./src/types";
+import { Outlet, TabName, UserProfile, ServiceCategory } from "./src/types";
 import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>("beranda");
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<
+    ServiceCategory | undefined
+  >(undefined);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
@@ -81,8 +84,9 @@ export default function App() {
           <>
             {activeTab === "beranda" && (
               <HomeScreen
-                onSelectOutlet={(outlet) => {
+                onSelectOutlet={(outlet, category) => {
                   setSelectedOutlet(outlet);
+                  setSelectedCategory(category);
                   setOrderModalVisible(true);
                 }}
                 onOpenNotifications={() => setShowNotifications(true)}
@@ -183,10 +187,15 @@ export default function App() {
       <OrderModal
         visible={orderModalVisible}
         outlet={selectedOutlet}
+        initialCategory={selectedCategory}
         customerId={currentUser.id}
-        onClose={() => setOrderModalVisible(false)}
+        onClose={() => {
+          setOrderModalVisible(false);
+          setSelectedCategory(undefined);
+        }}
         onOrderSuccess={() => {
           setOrderModalVisible(false);
+          setSelectedCategory(undefined);
           setActiveTab("pesanan");
         }}
       />

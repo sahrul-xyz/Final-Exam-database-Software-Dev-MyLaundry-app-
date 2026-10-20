@@ -67,3 +67,5 @@ export interface CustomerOrder {
   createdAt: string;
   items: OrderItem[];
 }
+
+export type ServiceCategory = "kiloan" | "express" | "satuan";
