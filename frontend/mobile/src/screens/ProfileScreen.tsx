@@ -1,97 +1,325 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { UserProfile } from "../types";
+import { savePersonalData } from "../services/profileService";
+
+type ProfileScreenProps = {
+  user: UserProfile;
+  onLogout?: () => void;
+  onSaved?: (user: UserProfile) => void;
+};
 
 export function ProfileScreen({
   user,
   onLogout,
-}: {
-  user?: { fullName: string; email: string };
-  onLogout?: () => void;
-}) {
-  const name = user?.fullName || "Alya Putri";
-  const email = user?.email || "alya.putri@email.com";
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  onSaved,
+}: ProfileScreenProps) {
+  const [savedUser, setSavedUser] = useState<UserProfile>(user);
+  const [isEditing, setIsEditing] = useState(false);
+  const [fullName, setFullName] = useState(user.fullName);
+  const [email, setEmail] = useState(user.email);
+  const [phone, setPhone] = useState(user.phone || "");
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  const initials =
+    savedUser.fullName
+      .trim()
+      .split(/\s+/)
+      .map((name) => Array.from(name)[0] || "")
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?";
+
+  const hasChanges =
+    fullName.trim() !== savedUser.fullName ||
+    email.trim() !== savedUser.email ||
+    phone.trim() !== (savedUser.phone || "");
+
+  const openEditor = () => {
+    setFullName(savedUser.fullName);
+    setEmail(savedUser.email);
+    setPhone(savedUser.phone || "");
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    const discard = () => {
+      setFullName(savedUser.fullName);
+      setEmail(savedUser.email);
+      setPhone(savedUser.phone || "");
+      setIsEditing(false);
+    };
+
+    if (hasChanges) {
+      Alert.alert(
+        "Batalkan perubahan?",
+        "Perubahan data diri yang belum disimpan akan dibuang.",
+        [
+          { text: "Lanjut edit", style: "cancel" },
+          {
+            text: "Buang perubahan",
+            style: "destructive",
+            onPress: discard,
+          },
+        ]
+      );
+      return;
+    }
+
+    discard();
+  };
+
+  const handleSave = async () => {
+    if (savingRef.current) return;
+
+    savingRef.current = true;
+    setSaving(true);
+
+    try {
+      const result = await savePersonalData(savedUser, {
+        fullName,
+        email,
+        phone,
+      });
+
+      setSavedUser(result.user);
+      setFullName(result.user.fullName);
+      setEmail(result.user.email);
+      setPhone(result.user.phone || "");
+      onSaved?.(result.user);
+      setIsEditing(false);
+
+      Alert.alert("Hasil penyimpanan", result.message);
+    } catch (error) {
+      Alert.alert(
+        "Belum berhasil menyimpan",
+        error instanceof Error
+          ? error.message
+          : "Periksa koneksi internet lalu coba lagi."
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const handleLogout = () => {
+    if (savingRef.current) return;
+
+    if (isEditing && hasChanges) {
+      Alert.alert(
+        "Perubahan belum disimpan",
+        "Tetap keluar dan buang perubahan?",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Keluar",
+            style: "destructive",
+            onPress: onLogout,
+          },
+        ]
+      );
+      return;
+    }
+
+    onLogout?.();
+  };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>AKUN SAYA</Text>
-        <Text style={styles.title}>Profil</Text>
-      </View>
-
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>AKUN SAYA</Text>
+          <Text style={styles.title}>Profil</Text>
         </View>
-        <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={styles.userName}>{name}</Text>
-          <Text style={styles.userEmail}>{email}</Text>
-          <View style={styles.verifiedBadge}>
-            <Text style={styles.verifiedText}>✓ Akun terverifikasi</Text>
+
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+
+          <View style={styles.profileInfo}>
+            <Text style={styles.userName}>{savedUser.fullName}</Text>
+            <Text style={styles.userEmail}>{savedUser.email}</Text>
+            <Text style={styles.userPhone}>
+              {savedUser.phone || "Nomor telepon belum diisi"}
+            </Text>
           </View>
         </View>
-      </View>
 
-      <Text style={styles.sectionLabel}>PENGATURAN AKUN</Text>
-      <View style={styles.menuCard}>
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>👤</Text>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.menuTitle}>Data diri</Text>
-            <Text style={styles.menuSub}>Nama, email, dan nomor telepon</Text>
+        <Text style={styles.sectionLabel}>PENGATURAN AKUN</Text>
+
+        <View style={styles.menuCard}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={isEditing ? cancelEditing : openEditor}
+            disabled={saving}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isEditing }}
+          >
+            <Text style={styles.menuIcon}>👤</Text>
+
+            <View style={styles.menuInfo}>
+              <Text style={styles.menuTitle}>Data diri</Text>
+              <Text style={styles.menuSub}>
+                Nama, email, dan nomor telepon
+              </Text>
+            </View>
+
+            <Text style={styles.menuChevron}>
+              {isEditing ? "⌄" : "›"}
+            </Text>
+          </TouchableOpacity>
+
+          {isEditing && (
+            <View style={styles.form}>
+              <Text style={styles.formTitle}>Edit data diri</Text>
+
+              <Text style={styles.label}>Nama lengkap</Text>
+              <TextInput
+                style={styles.input}
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="Masukkan nama lengkap"
+                placeholderTextColor="#94a3b8"
+                maxLength={100}
+                autoCapitalize="words"
+                editable={!saving}
+                accessibilityLabel="Nama lengkap"
+              />
+
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="nama@email.com"
+                placeholderTextColor="#94a3b8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={254}
+                editable={!saving}
+                accessibilityLabel="Email"
+              />
+
+              <Text style={styles.helpText}>
+                Jika email diubah, Anda mungkin perlu melakukan konfirmasi
+                melalui email lama dan baru.
+              </Text>
+
+              <Text style={styles.label}>Nomor telepon</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="08xxxxxxxxxx"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+                maxLength={20}
+                editable={!saving}
+                accessibilityLabel="Nomor telepon"
+              />
+
+              <Text style={styles.helpText}>
+                Simpan perubahan sebelum berpindah tab.
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  (saving || !hasChanges) && styles.disabledButton,
+                ]}
+                onPress={handleSave}
+                disabled={saving || !hasChanges}
+                accessibilityRole="button"
+              >
+                {saving && (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                    style={{ marginRight: 8 }}
+                  />
+                )}
+                <Text style={styles.saveText}>
+                  {saving ? "Menyimpan..." : "Simpan perubahan"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={cancelEditing}
+                disabled={saving}
+              >
+                <Text style={styles.cancelText}>Batal</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Fitur alamat akan diaktifkan pada tahap berikutnya. */}
+          <View style={styles.menuItem}>
+            <Text style={styles.menuIcon}>📍</Text>
+            <View style={styles.menuInfo}>
+              <Text style={styles.menuTitle}>Alamat tersimpan</Text>
+              <Text style={styles.menuSub}>
+                Pengaturan alamat belum diaktifkan
+              </Text>
+            </View>
+            <Text style={styles.menuChevron}>›</Text>
           </View>
-          <Text style={styles.menuChevron}>›</Text>
-        </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>📍</Text>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.menuTitle}>Alamat tersimpan</Text>
-            <Text style={styles.menuSub}>2 alamat pengantaran</Text>
+          {/* Fitur pembayaran akan diaktifkan pada tahap berikutnya. */}
+          <View style={[styles.menuItem, styles.lastMenuItem]}>
+            <Text style={styles.menuIcon}>💳</Text>
+            <View style={styles.menuInfo}>
+              <Text style={styles.menuTitle}>Metode pembayaran</Text>
+              <Text style={styles.menuSub}>
+                Pengaturan pembayaran belum diaktifkan
+              </Text>
+            </View>
+            <Text style={styles.menuChevron}>›</Text>
           </View>
-          <Text style={styles.menuChevron}>›</Text>
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]}>
-          <Text style={styles.menuIcon}>💳</Text>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.menuTitle}>Metode pembayaran</Text>
-            <Text style={styles.menuSub}>GoPay terhubung</Text>
-          </View>
-          <Text style={styles.menuChevron}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.addressCard}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.addressCard}>
           <Text style={styles.addressEyebrow}>ALAMAT UTAMA</Text>
-          <Text style={styles.addressTitle}>Rumah</Text>
           <Text style={styles.addressDesc}>
-            Jl. Sersan Bajuri No. 48, Setiabudi{"\n"}Bandung, Jawa Barat 40154
+            Pengaturan alamat utama akan tersedia pada tahap berikutnya.
           </Text>
         </View>
-        <TouchableOpacity>
-          <Text style={styles.editBtn}>Ubah</Text>
-        </TouchableOpacity>
-      </View>
 
-      {onLogout && (
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutText}>Keluar dari Akun</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+        {onLogout && (
+          <TouchableOpacity
+            style={[
+              styles.logoutButton,
+              saving && styles.disabledButton,
+            ]}
+            onPress={handleLogout}
+            disabled={saving}
+          >
+            <Text style={styles.logoutText}>Keluar dari Akun</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -142,6 +370,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
   },
+  profileInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
   userName: {
     fontSize: 16,
     fontWeight: "800",
@@ -150,20 +382,12 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 12,
     color: "#64748b",
-    marginTop: 2,
-    marginBottom: 6,
+    marginTop: 4,
   },
-  verifiedBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#e6f7ef",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  verifiedText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#169b62",
+  userPhone: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 4,
   },
   sectionLabel: {
     fontSize: 11,
@@ -187,8 +411,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
+  lastMenuItem: {
+    borderBottomWidth: 0,
+  },
   menuIcon: {
     fontSize: 18,
+  },
+  menuInfo: {
+    flex: 1,
+    marginLeft: 12,
   },
   menuTitle: {
     fontSize: 13,
@@ -203,10 +434,71 @@ const styles = StyleSheet.create({
   menuChevron: {
     fontSize: 20,
     color: "#94a3b8",
+    marginLeft: 8,
+  },
+  form: {
+    padding: 16,
+    backgroundColor: "#f8fbff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e4eaf1",
+  },
+  formTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#09234d",
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#09234d",
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#09234d",
+  },
+  helpText: {
+    fontSize: 11,
+    color: "#64748b",
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  saveButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0878f9",
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginTop: 18,
+  },
+  saveText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  cancelButton: {
+    alignItems: "center",
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  cancelText: {
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "600",
   },
   addressCard: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#f1f8ff",
     borderRadius: 16,
     borderWidth: 1,
@@ -220,23 +512,11 @@ const styles = StyleSheet.create({
     color: "#0878f9",
     letterSpacing: 0.6,
   },
-  addressTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#09234d",
-    marginTop: 2,
-  },
   addressDesc: {
     fontSize: 11,
     color: "#64748b",
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  editBtn: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0878f9",
-    marginLeft: 10,
+    marginTop: 6,
+    lineHeight: 17,
   },
   logoutButton: {
     backgroundColor: "#fee2e2",
