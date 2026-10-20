@@ -8,7 +8,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "jest"
+    "test": "jest",
+    "check:maps": "node scripts/check-maps-key.js",
+    "verify:app": "node scripts/verify-app-flow.js",
+    "validate:map": "node scripts/validate-map-html.js",
+    "validate:map:render": "node scripts/validate-map-render.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
@@ -18,10 +22,12 @@
     "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
     "expo-keep-awake": "~57.0.2",
+    "expo-location": "~57.0.21",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-svg": "15.15.4"
+    "react-native-svg": "15.15.4",
+    "react-native-webview": "13.16.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",

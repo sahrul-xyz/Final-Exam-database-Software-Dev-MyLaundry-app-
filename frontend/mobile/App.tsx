@@ -14,6 +14,7 @@ import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { OrderModal } from "./src/components/OrderModal";
+import { MapScreen } from "./src/screens/MapScreen";
 import { Outlet, TabName, UserProfile } from "./src/types";
 import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
 
@@ -21,6 +22,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>("beranda");
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [mapVisible, setMapVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
 
@@ -69,6 +71,7 @@ export default function App() {
               setSelectedOutlet(outlet);
               setOrderModalVisible(true);
             }}
+            onOpenMap={() => setMapVisible(true)}
           />
         )}
         {activeTab === "pesanan" && (
@@ -171,6 +174,25 @@ export default function App() {
           setActiveTab("pesanan");
         }}
       />
+
+      {/* Popup Peta Outlet (Google Maps) - overlay di atas halaman */}
+      <Modal
+        visible={mapVisible}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setMapVisible(false)}
+      >
+        <MapScreen
+          visible={mapVisible}
+          onClose={() => setMapVisible(false)}
+          onSelectOutlet={(outlet) => {
+            setMapVisible(false);
+            setSelectedOutlet(outlet);
+            setOrderModalVisible(true);
+          }}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -15,8 +15,10 @@ import { Outlet } from "../types";
 
 export function HomeScreen({
   onSelectOutlet,
+  onOpenMap,
 }: {
   onSelectOutlet?: (outlet: Outlet) => void;
+  onOpenMap?: () => void;
 }) {
   const [outlets, setOutlets] = useState<Outlet[]>(fallbackOutlets);
   const [refreshing, setRefreshing] = useState(false);
@@ -99,7 +101,11 @@ export function HomeScreen({
           <Text style={styles.sectionEyebrow}>DI SEKITARMU</Text>
           <Text style={styles.sectionTitle}>Outlet pilihan</Text>
         </View>
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={onOpenMap}
+          activeOpacity={0.7}
+          style={styles.seeMapButton}
+        >
           <Text style={styles.seeMapText}>Lihat peta</Text>
         </TouchableOpacity>
       </View>
@@ -223,6 +229,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#0878f9",
+  },
+  seeMapButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
   outletList: {
     paddingHorizontal: 20,

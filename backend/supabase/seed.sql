@@ -2,10 +2,10 @@
 
 -- Dummy Outlets & Services
 -- Catatan: ID owner merujuk ke auth.users, pastikan membuat user terlebih dahulu atau insert saat auth siap
-INSERT INTO public.laundry_outlets (id, owner_id, name, address_text, service_area, operating_hours, is_active, photo_url)
+INSERT INTO public.laundry_outlets (id, owner_id, name, address_text, service_area, operating_hours, is_active, photo_url, latitude, longitude)
 VALUES 
-('a0000000-0000-0000-0000-000000000001', NULL, 'Bersih Laundry Setiabudi', 'Jl. Dr. Setiabudi No. 156, Bandung', 'Setiabudi, Gegerkalong, Sukasari', '08.00 - 20.00', true, 'https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080'),
-('a0000000-0000-0000-0000-000000000002', NULL, 'FreshFold Dago', 'Jl. Ir. H. Djuanda No. 88, Bandung', 'Dago, Coblong, Sekeloa', '07.30 - 21.00', true, 'https://images.unsplash.com/photo-1765163076573-26499e530ec8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=80&w=900')
+('a0000000-0000-0000-0000-000000000001', NULL, 'Bersih Laundry Setiabudi', 'Jl. Dr. Setiabudi No. 156, Bandung', 'Setiabudi, Gegerkalong, Sukasari', '08.00 - 20.00', true, 'https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080', -6.858430, 107.590030),
+('a0000000-0000-0000-0000-000000000002', NULL, 'FreshFold Dago', 'Jl. Ir. H. Djuanda No. 88, Bandung', 'Dago, Coblong, Sekeloa', '07.30 - 21.00', true, 'https://images.unsplash.com/photo-1765163076573-26499e530ec8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=80&w=900', -6.888760, 107.613590)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.laundry_services (outlet_id, name, pricing_type, price, estimated_duration_hours, is_active)

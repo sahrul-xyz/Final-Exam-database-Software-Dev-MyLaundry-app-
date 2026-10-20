@@ -32,6 +32,26 @@ cp frontend/mobile/.env.example frontend/mobile/.env
 
 > **Note:** The default `.env` files point to our active cloud Supabase test instance. If you run Supabase locally, set the URL to `http://127.0.0.1:54321`.
 
+#### Google Maps API Key (untuk fitur peta di aplikasi mobile)
+
+```bash
+# Isi dengan API key milik Anda pada file frontend/mobile/.env
+# (Google Maps JavaScript API -> dipakai di dalam WebView peta)
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=AIza...
+```
+
+Langkah mendapatkan key:
+1. Buka [Google Cloud Console](https://console.cloud.google.com/) → buat/pilih project.
+2. **APIs & Services → Library** → aktifkan **Maps JavaScript API**.
+3. **Credentials → Create Credentials → API key**.
+4. Atur *Application restrictions* → **HTTP referrers**: `localhost*` (peta dirender di dalam WebView dengan base URL `https://localhost/`). > Kalau Google menolak dengan `RefererNotAllowedMapError`, ubah *Application restrictions* menjadi **None** dan *API restrictions* menjadi **Maps JavaScript API** saja.
+5. Atur *API restrictions* → **Maps JavaScript API**.
+6. Salin key ke `frontend/mobile/.env`, lalu jalankan `npx expo start -c` (clear cache).
+7. Verifikasi: `cd frontend/mobile && npm run check:maps`
+
+> Key ini dibaca oleh `frontend/mobile/app.config.ts` dan otomatis disisipkan ke `android.config.googleMaps.apiKey` serta `ios.config.googleMapsApiKey` saat build.
+> **Bila key belum diisi**, peta otomatis memakai OpenStreetMap (tanpa API key) sehingga tetap tampil.
+
 ---
 
 ### 3. Running the Applications
@@ -64,14 +84,14 @@ cd frontend/mobile
 npm test
 ```
 
-**Test Suite Coverage (12 Automated Tests):**
+**Test Suite Coverage (25 Automated Tests):**
 - Subtotal calculation & minimum quantity validation (`quantity >= 1`)
 - Marketplace commission calculation (5% snapshot)
 - Order expiration rules (15-min digital payment deadline & 30-min partner response deadline)
 - Customer complaint window eligibility (strictly within 1 hour of completion)
 - Order status state-machine lifecycle & legal transition validation
 - Rupiah currency and Indonesian localized date formatters
-
+- Map coordinate validation, region calculation & HTML map builder (Google/OSM)
 ---
 
 ## 🔑 Test Accounts (Akun Pengujian)
@@ -87,6 +107,27 @@ Use these credentials to test the application flows:
 
 ---
 
+## 🗺️ Fitur Peta Outlet (Google Maps)
+
+Seluruh interaksi peta berlangsung **di dalam aplikasi** — tidak ada perpindahan ke aplikasi Google Maps.
+
+| Kemampuan | Implementasi |
+|---|---|
+| Peta in-app | Google Maps **JavaScript API** di dalam `react-native-webview` (render penuh, 100% di dalam app) |
+| API key | `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` → dipakai sebagai key *Maps JavaScript API* |
+| **Tema** | Tampilan **standar/bawaan** — Google Maps tanpa custom `styles`, OpenStreetMap tanpa filter warna |
+| Marker outlet | Koordinat WGS84 dari kolom `latitude` / `longitude` pada tabel `laundry_outlets` |
+| Detail outlet | Ketuk marker → popup berisi nama, alamat, rating, jarak, harga + tombol **Pesan** |
+| Lokasi pengguna | `expo-location` dengan tombol "◎" (pusat peta ke posisi perangkat) |
+| Fallback | Bila key kosong/tidak valid atau offline → otomatis beralih ke **OpenStreetMap** (Leaflet) |
+
+> **Mengapa WebView, bukan `react-native-maps`?**
+> Google Maps SDK native **tidak bisa dipakai di Expo Go** — API key bawaan Expo Go sudah tidak valid sehingga peta tampil gelap/hitam (`Google Android Maps SDK host.exp.exponent E Authorization failure`). Dengan WebView, peta **selalu tampil** di Expo Go, Android Emulator, maupun build production, karena hanya butuh koneksi internet.
+
+Alur klik: `Beranda → Lihat peta` membuka **popup peta** (bottom sheet modal) di atas halaman → ketuk marker untuk melihat detail outlet → **Pesan** untuk lanjut memesan.
+
+---
+
 ## 📁 Repository Structure
 
 Adheres strictly to PRD v1.2 specifications:
@@ -97,11 +138,11 @@ MyLaundry/
 │   ├── mobile/          # Customer Mobile App (React Native + TypeScript + Expo)
 │   │   ├── src/
 │   │   │   ├── components/  # Order modal, outlet cards, headers
-│   │   │   ├── screens/     # Home, Orders, Profile, Auth screens
-│   │   │   ├── services/    # Supabase client & atomic RPC calls
+│   │   │   ├── screens/     # Home, Map, Orders, Profile, Auth screens
+│   │   │   ├── services/    # Supabase client, atomic RPC calls
 │   │   │   ├── types/       # TypeScript schemas & status enums
-│   │   │   └── utils/       # Formatters & business rule helpers
-│   │   ├── tests/           # Automated Jest test suites (12 tests)
+│   │   │   └── utils/       # Formatters, business rule helpers, map HTML builder
+│   │   ├── tests/           # Automated Jest test suites (25 tests)
 │   │   └── package.json
 │   └── dashboard/       # Partner Web Dashboard (React + Vite + TypeScript)
 │       ├── src/
