@@ -21,6 +21,7 @@ import {
   uploadProfilePhoto,
   removeProfilePhoto,
 } from "../services/profilePhotoService";
+import { ProfileAddresses } from "../components/ProfileAddresses";
 
 type ProfileScreenProps = {
   user: UserProfile;
@@ -533,16 +534,7 @@ export function ProfileScreen({
             </View>
           )}
 
-          <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>📍</Text>
-            <View style={styles.menuInfo}>
-              <Text style={styles.menuTitle}>Alamat tersimpan</Text>
-              <Text style={styles.menuSub}>
-                Pengaturan alamat belum diaktifkan
-              </Text>
-            </View>
-            <Text style={styles.menuChevron}>›</Text>
-          </View>
+          
 
           <View style={[styles.menuItem, styles.lastMenuItem]}>
             <Text style={styles.menuIcon}>💳</Text>
@@ -556,12 +548,7 @@ export function ProfileScreen({
           </View>
         </View>
 
-        <View style={styles.addressCard}>
-          <Text style={styles.addressEyebrow}>ALAMAT UTAMA</Text>
-          <Text style={styles.addressDesc}>
-            Pengaturan alamat utama akan tersedia pada tahap berikutnya.
-          </Text>
-        </View>
+        <ProfileAddresses userId={savedUser.id} />
 
         {(photoDraft || (isEditing && hasChanges)) && (
           <Text style={styles.unsavedText}>
