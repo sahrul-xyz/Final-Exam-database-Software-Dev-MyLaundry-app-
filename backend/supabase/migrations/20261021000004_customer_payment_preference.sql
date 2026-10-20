@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE public.profiles
+ADD COLUMN IF NOT EXISTS preferred_payment TEXT
+NOT NULL DEFAULT 'cash';
+
+COMMIT;
