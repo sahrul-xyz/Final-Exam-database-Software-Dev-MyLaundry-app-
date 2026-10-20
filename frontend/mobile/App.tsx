@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Modal,
   ActivityIndicator,
 } from "react-native";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -14,12 +13,20 @@ import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { OrderModal } from "./src/components/OrderModal";
-import { Outlet, TabName, UserProfile } from "./src/types";
+import {
+  Outlet,
+  TabName,
+  UserProfile,
+  ServiceCategory,
+} from "./src/types";
 import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>("beranda");
   const [selectedOutlet, setSelectedOutlet] = useState<Outlet | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<
+    ServiceCategory | undefined
+  >(undefined);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
@@ -65,8 +72,9 @@ export default function App() {
       <View style={styles.screenContainer}>
         {activeTab === "beranda" && (
           <HomeScreen
-            onSelectOutlet={(outlet) => {
+            onSelectOutlet={(outlet, category) => {
               setSelectedOutlet(outlet);
+              setSelectedCategory(category);
               setOrderModalVisible(true);
             }}
           />
@@ -164,10 +172,15 @@ export default function App() {
       <OrderModal
         visible={orderModalVisible}
         outlet={selectedOutlet}
+        initialCategory={selectedCategory}
         customerId={currentUser.id}
-        onClose={() => setOrderModalVisible(false)}
+        onClose={() => {
+          setOrderModalVisible(false);
+          setSelectedCategory(undefined);
+        }}
         onOrderSuccess={() => {
           setOrderModalVisible(false);
+          setSelectedCategory(undefined);
           setActiveTab("pesanan");
         }}
       />
@@ -234,85 +247,5 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#d64343",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(9, 35, 77, 0.4)",
-    justifyContent: "flex-end",
-  },
-  modalSheet: {
-    backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#cbd5e1",
-    alignSelf: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#09234d",
-  },
-  modalAddress: {
-    fontSize: 12,
-    color: "#64748b",
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  serviceBox: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 20,
-  },
-  serviceBoxTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0878f9",
-    letterSpacing: 0.6,
-    marginBottom: 10,
-  },
-  serviceItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-  },
-  serviceItemName: {
-    fontSize: 13,
-    color: "#09234d",
-    fontWeight: "600",
-  },
-  serviceItemPrice: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#075ecf",
-  },
-  orderButton: {
-    backgroundColor: "#0878f9",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  orderButtonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  closeButton: {
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  closeButtonText: {
-    color: "#64748b",
-    fontSize: 13,
-    fontWeight: "600",
   },
 });
