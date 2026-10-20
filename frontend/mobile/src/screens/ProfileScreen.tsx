@@ -22,6 +22,7 @@ import {
   removeProfilePhoto,
 } from "../services/profilePhotoService";
 import { ProfileAddresses } from "../components/ProfileAddresses";
+import { ProfilePayment } from "../components/ProfilePayment";
 
 type ProfileScreenProps = {
   user: UserProfile;
@@ -536,19 +537,11 @@ export function ProfileScreen({
 
           
 
-          <View style={[styles.menuItem, styles.lastMenuItem]}>
-            <Text style={styles.menuIcon}>💳</Text>
-            <View style={styles.menuInfo}>
-              <Text style={styles.menuTitle}>Metode pembayaran</Text>
-              <Text style={styles.menuSub}>
-                Pengaturan pembayaran belum diaktifkan
-              </Text>
-            </View>
-            <Text style={styles.menuChevron}>›</Text>
-          </View>
+          
         </View>
 
         <ProfileAddresses userId={savedUser.id} />
+        <ProfilePayment userId={savedUser.id} />
 
         {(photoDraft || (isEditing && hasChanges)) && (
           <Text style={styles.unsavedText}>
