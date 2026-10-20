@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,19 +6,37 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
+  Image,
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+
 import { UserProfile } from "../types";
 import { savePersonalData } from "../services/profileService";
+import {
+  getProfilePhoto,
+  uploadProfilePhoto,
+  removeProfilePhoto,
+} from "../services/profilePhotoService";
 
 type ProfileScreenProps = {
   user: UserProfile;
   onLogout?: () => void;
   onSaved?: (user: UserProfile) => void;
 };
+
+type PhotoDraft =
+  | { action: "upload"; base64: string; uri: string }
+  | { action: "remove" }
+  | null;
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return "Periksa koneksi internet lalu coba lagi.";
+}
 
 export function ProfileScreen({
   user,
@@ -30,8 +48,50 @@ export function ProfileScreen({
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
   const [phone, setPhone] = useState(user.phone || "");
+
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [photoDraft, setPhotoDraft] = useState<PhotoDraft>(null);
+  const [loadingPhoto, setLoadingPhoto] = useState(true);
+  const [photoError, setPhotoError] = useState("");
+  const [imageFailed, setImageFailed] = useState(false);
+  const [photoReload, setPhotoReload] = useState(0);
+
   const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [pickingPhoto, setPickingPhoto] = useState(false);
+
+  const operationRef = useRef(false);
+
+  const busy = saving || savingPhoto || pickingPhoto;
+
+  // Ambil foto tersimpan setiap halaman profil dibuka.
+  useEffect(() => {
+    let active = true;
+
+    setLoadingPhoto(true);
+    setPhotoError("");
+    setImageFailed(false);
+
+    getProfilePhoto(user.id)
+      .then((result) => {
+        if (!active) return;
+
+        setPhotoUrl(result.url);
+        setPhotoPath(result.path);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setPhotoError(errorMessage(error));
+      })
+      .finally(() => {
+        if (active) setLoadingPhoto(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user.id, photoReload]);
 
   const initials =
     savedUser.fullName
@@ -46,6 +106,17 @@ export function ProfileScreen({
     fullName.trim() !== savedUser.fullName ||
     email.trim() !== savedUser.email ||
     phone.trim() !== (savedUser.phone || "");
+
+  const displayedPhoto =
+    photoDraft?.action === "upload"
+      ? photoDraft.uri
+      : photoDraft?.action === "remove"
+        ? null
+        : photoUrl;
+
+  const canRemovePhoto =
+    photoDraft?.action === "upload" ||
+    (photoDraft?.action !== "remove" && !!photoPath);
 
   const openEditor = () => {
     setFullName(savedUser.fullName);
@@ -82,9 +153,9 @@ export function ProfileScreen({
   };
 
   const handleSave = async () => {
-    if (savingRef.current) return;
+    if (operationRef.current) return;
 
-    savingRef.current = true;
+    operationRef.current = true;
     setSaving(true);
 
     try {
@@ -98,27 +169,135 @@ export function ProfileScreen({
       setFullName(result.user.fullName);
       setEmail(result.user.email);
       setPhone(result.user.phone || "");
+
       onSaved?.(result.user);
       setIsEditing(false);
 
       Alert.alert("Hasil penyimpanan", result.message);
     } catch (error) {
-      Alert.alert(
-        "Belum berhasil menyimpan",
-        error instanceof Error
-          ? error.message
-          : "Periksa koneksi internet lalu coba lagi."
-      );
+      Alert.alert("Belum berhasil menyimpan", errorMessage(error));
     } finally {
-      savingRef.current = false;
+      operationRef.current = false;
       setSaving(false);
     }
   };
 
-  const handleLogout = () => {
-    if (savingRef.current) return;
+  const pickPhoto = async () => {
+    if (operationRef.current) return;
 
-    if (isEditing && hasChanges) {
+    operationRef.current = true;
+    setPickingPhoto(true);
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+
+      if (!asset?.base64) {
+        throw new Error("Foto tidak terbaca. Silakan pilih foto lain.");
+      }
+
+      if (asset.base64.length * 0.75 > 5 * 1024 * 1024) {
+        throw new Error("Foto maksimal 5 MB. Pilih foto lebih kecil.");
+      }
+
+      setPhotoDraft({
+        action: "upload",
+        base64: asset.base64,
+        uri: asset.uri,
+      });
+
+      setImageFailed(false);
+    } catch (error) {
+      Alert.alert("Foto belum dipilih", errorMessage(error));
+    } finally {
+      operationRef.current = false;
+      setPickingPhoto(false);
+    }
+  };
+
+  const showPhotoOptions = () => {
+    if (busy || loadingPhoto || photoError) return;
+
+    Alert.alert(
+      "Foto profil",
+      "Pilih tindakan. Perubahan diterapkan setelah disimpan.",
+      [
+        {
+          text: "Pilih dari galeri",
+          onPress: () => void pickPhoto(),
+        },
+        ...(canRemovePhoto
+          ? [
+              {
+                text: "Hapus foto",
+                style: "destructive" as const,
+                onPress: () => {
+                  setPhotoDraft({ action: "remove" });
+                  setImageFailed(false);
+                },
+              },
+            ]
+          : []),
+        { text: "Batal", style: "cancel" },
+      ]
+    );
+  };
+
+  const handleSavePhoto = async () => {
+    if (!photoDraft || operationRef.current) return;
+
+    operationRef.current = true;
+    setSavingPhoto(true);
+
+    try {
+      if (photoDraft.action === "upload") {
+        const result = await uploadProfilePhoto(
+          savedUser.id,
+          photoDraft.base64
+        );
+
+        setPhotoUrl(result.url);
+        setPhotoPath(result.path);
+      } else {
+        await removeProfilePhoto(savedUser.id);
+
+        setPhotoUrl(null);
+        setPhotoPath(null);
+      }
+
+      setPhotoDraft(null);
+      setImageFailed(false);
+
+      Alert.alert("Berhasil", "Perubahan foto profil berhasil disimpan.");
+    } catch (error) {
+      Alert.alert(
+        "Foto belum berhasil disimpan",
+        errorMessage(error)
+      );
+    } finally {
+      operationRef.current = false;
+      setSavingPhoto(false);
+    }
+  };
+
+  const cancelPhoto = () => {
+    setPhotoDraft(null);
+    setImageFailed(false);
+  };
+
+  const handleLogout = () => {
+    if (operationRef.current) return;
+
+    if ((isEditing && hasChanges) || photoDraft) {
       Alert.alert(
         "Perubahan belum disimpan",
         "Tetap keluar dan buang perubahan?",
@@ -152,9 +331,29 @@ export function ProfileScreen({
         </View>
 
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          <TouchableOpacity
+            onPress={showPhotoOptions}
+            disabled={busy || loadingPhoto || !!photoError}
+            accessibilityRole="button"
+            accessibilityLabel="Ubah foto profil"
+          >
+            <View style={styles.avatar}>
+              {loadingPhoto || pickingPhoto ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : displayedPhoto && !imageFailed ? (
+                <Image
+                  source={{ uri: displayedPhoto }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                  onError={() => setImageFailed(true)}
+                />
+              ) : (
+                <Text style={styles.avatarText}>{initials}</Text>
+              )}
+            </View>
+
+            <Text style={styles.changePhotoText}>Ubah foto</Text>
+          </TouchableOpacity>
 
           <View style={styles.profileInfo}>
             <Text style={styles.userName}>{savedUser.fullName}</Text>
@@ -165,13 +364,76 @@ export function ProfileScreen({
           </View>
         </View>
 
+        {!!photoError && (
+          <View style={styles.noticeCard}>
+            <Text style={styles.errorText}>{photoError}</Text>
+
+            <TouchableOpacity
+              style={styles.smallButton}
+              disabled={busy || loadingPhoto}
+              onPress={() => setPhotoReload((value) => value + 1)}
+            >
+              <Text style={styles.linkText}>Coba muat foto lagi</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {imageFailed && (
+          <Text style={styles.helpText}>
+            Gambar belum bisa ditampilkan. Coba buka ulang tab Profil.
+          </Text>
+        )}
+
+        {photoDraft && (
+          <View style={styles.photoEditor}>
+            <Text style={styles.formTitle}>Perubahan foto</Text>
+
+            <Text style={styles.helpText}>
+              {photoDraft.action === "upload"
+                ? "Foto baru sudah dipilih. Simpan untuk menerapkannya ke akun."
+                : "Foto akan dihapus dari profil dan diganti dengan inisial nama."}
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                busy && styles.disabledButton,
+              ]}
+              onPress={handleSavePhoto}
+              disabled={busy}
+            >
+              {savingPhoto && (
+                <ActivityIndicator
+                  size="small"
+                  color="#ffffff"
+                  style={{ marginRight: 8 }}
+                />
+              )}
+
+              <Text style={styles.saveText}>
+                {savingPhoto
+                  ? "Menyimpan foto..."
+                  : "Simpan perubahan foto"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={cancelPhoto}
+              disabled={busy}
+            >
+              <Text style={styles.cancelText}>Batal ubah foto</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <Text style={styles.sectionLabel}>PENGATURAN AKUN</Text>
 
         <View style={styles.menuCard}>
           <TouchableOpacity
             style={styles.menuItem}
             onPress={isEditing ? cancelEditing : openEditor}
-            disabled={saving}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityState={{ expanded: isEditing }}
           >
@@ -202,7 +464,7 @@ export function ProfileScreen({
                 placeholderTextColor="#94a3b8"
                 maxLength={100}
                 autoCapitalize="words"
-                editable={!saving}
+                editable={!busy}
                 accessibilityLabel="Nama lengkap"
               />
 
@@ -217,7 +479,7 @@ export function ProfileScreen({
                 autoCapitalize="none"
                 autoCorrect={false}
                 maxLength={254}
-                editable={!saving}
+                editable={!busy}
                 accessibilityLabel="Email"
               />
 
@@ -235,21 +497,17 @@ export function ProfileScreen({
                 placeholderTextColor="#94a3b8"
                 keyboardType="phone-pad"
                 maxLength={20}
-                editable={!saving}
+                editable={!busy}
                 accessibilityLabel="Nomor telepon"
               />
-
-              <Text style={styles.helpText}>
-                Simpan perubahan sebelum berpindah tab.
-              </Text>
 
               <TouchableOpacity
                 style={[
                   styles.saveButton,
-                  (saving || !hasChanges) && styles.disabledButton,
+                  (busy || !hasChanges) && styles.disabledButton,
                 ]}
                 onPress={handleSave}
-                disabled={saving || !hasChanges}
+                disabled={busy || !hasChanges}
                 accessibilityRole="button"
               >
                 {saving && (
@@ -259,6 +517,7 @@ export function ProfileScreen({
                     style={{ marginRight: 8 }}
                   />
                 )}
+
                 <Text style={styles.saveText}>
                   {saving ? "Menyimpan..." : "Simpan perubahan"}
                 </Text>
@@ -267,14 +526,13 @@ export function ProfileScreen({
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={cancelEditing}
-                disabled={saving}
+                disabled={busy}
               >
                 <Text style={styles.cancelText}>Batal</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Fitur alamat akan diaktifkan pada tahap berikutnya. */}
           <View style={styles.menuItem}>
             <Text style={styles.menuIcon}>📍</Text>
             <View style={styles.menuInfo}>
@@ -286,7 +544,6 @@ export function ProfileScreen({
             <Text style={styles.menuChevron}>›</Text>
           </View>
 
-          {/* Fitur pembayaran akan diaktifkan pada tahap berikutnya. */}
           <View style={[styles.menuItem, styles.lastMenuItem]}>
             <Text style={styles.menuIcon}>💳</Text>
             <View style={styles.menuInfo}>
@@ -306,14 +563,20 @@ export function ProfileScreen({
           </Text>
         </View>
 
+        {(photoDraft || (isEditing && hasChanges)) && (
+          <Text style={styles.unsavedText}>
+            Simpan perubahan sebelum berpindah tab.
+          </Text>
+        )}
+
         {onLogout && (
           <TouchableOpacity
             style={[
               styles.logoutButton,
-              saving && styles.disabledButton,
+              busy && styles.disabledButton,
             ]}
             onPress={handleLogout}
-            disabled={saving}
+            disabled={busy}
           >
             <Text style={styles.logoutText}>Keluar dari Akun</Text>
           </TouchableOpacity>
@@ -355,20 +618,32 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#e4eaf1",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
+    width: 70,
+    height: 70,
+    borderRadius: 22,
     backgroundColor: "#0878f9",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   avatarText: {
     color: "#ffffff",
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "800",
+  },
+  changePhotoText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0878f9",
+    textAlign: "center",
+    marginTop: 8,
   },
   profileInfo: {
     flex: 1,
@@ -389,11 +664,39 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginTop: 4,
   },
+  noticeCard: {
+    padding: 14,
+    backgroundColor: "#fff7ed",
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: "#9a3412",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  smallButton: {
+    paddingVertical: 12,
+  },
+  linkText: {
+    color: "#0878f9",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  photoEditor: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#cfe7ff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.8,
+    marginTop: 4,
     marginBottom: 10,
   },
   menuCard: {
@@ -517,6 +820,11 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginTop: 6,
     lineHeight: 17,
+  },
+  unsavedText: {
+    fontSize: 11,
+    color: "#b45309",
+    marginBottom: 14,
   },
   logoutButton: {
     backgroundColor: "#fee2e2",
