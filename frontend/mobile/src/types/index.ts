@@ -24,6 +24,9 @@ export interface Outlet {
   eta: string;
   photo: string;
   verified: boolean;
+  /** Koordinat WGS84 untuk marker Google Maps (null bila outlet belum punya lokasi) */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface LaundryServiceItem {

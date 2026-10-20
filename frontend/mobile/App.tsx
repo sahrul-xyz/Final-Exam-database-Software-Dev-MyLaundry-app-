@@ -15,8 +15,16 @@ import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { NotificationHistoryScreen } from "./src/screens/NotificationHistoryScreen";
 import { OrderModal } from "./src/components/OrderModal";
+
+import { MapScreen } from "./src/screens/MapScreen";
+=======
 import { OrderNotifBanner } from "./src/components/OrderNotifBanner";
+nambahin
+
+import { Outlet, TabName, UserProfile } from "./src/types";
+=======
 import { Outlet, TabName, UserProfile, ServiceCategory } from "./src/types";
+
 import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
 
 export default function App() {
@@ -26,6 +34,7 @@ export default function App() {
     ServiceCategory | undefined
   >(undefined);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [mapVisible, setMapVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -75,10 +84,32 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor="#edf7ff" />
 
       <View style={styles.screenContainer}>
+
+        {activeTab === "beranda" && (
+          <HomeScreen
+            onSelectOutlet={(outlet) => {
+              setSelectedOutlet(outlet);
+              setOrderModalVisible(true);
+            }}
+            onOpenMap={() => setMapVisible(true)}
+          />
+        )}
+        {activeTab === "pesanan" && (
+          <OrdersScreen customerId={currentUser.id} />
+        )}
+        {activeTab === "profil" && (
+          <ProfileScreen
+            user={{
+              fullName: currentUser.fullName,
+              email: currentUser.email,
+            }}
+            onLogout={handleLogout}
+
         {showNotifications ? (
           <NotificationHistoryScreen
             customerId={currentUser.id}
             onBack={() => setShowNotifications(false)}
+
           />
         ) : (
           <>
@@ -200,11 +231,32 @@ export default function App() {
         }}
       />
 
+
+
+      <Modal
+        visible={mapVisible}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setMapVisible(false)}
+      >
+        <MapScreen
+          visible={mapVisible}
+          onClose={() => setMapVisible(false)}
+          onSelectOutlet={(outlet) => {
+            setMapVisible(false);
+            setSelectedOutlet(outlet);
+            setOrderModalVisible(true);
+          }}
+        />
+      </Modal>
+
       {/* Banner notif status pesanan (tap = buka Riwayat Notifikasi) */}
       <OrderNotifBanner
         customerId={currentUser.id}
         onOpen={() => setShowNotifications(true)}
       />
+
     </SafeAreaView>
   );
 }
