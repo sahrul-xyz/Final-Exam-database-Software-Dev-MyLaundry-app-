@@ -17,14 +17,8 @@ import { NotificationHistoryScreen } from "./src/screens/NotificationHistoryScre
 import { OrderModal } from "./src/components/OrderModal";
 
 import { MapScreen } from "./src/screens/MapScreen";
-=======
 import { OrderNotifBanner } from "./src/components/OrderNotifBanner";
-nambahin
-
-import { Outlet, TabName, UserProfile } from "./src/types";
-=======
 import { Outlet, TabName, UserProfile, ServiceCategory } from "./src/types";
-
 import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
 
 export default function App() {
@@ -84,32 +78,10 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor="#edf7ff" />
 
       <View style={styles.screenContainer}>
-
-        {activeTab === "beranda" && (
-          <HomeScreen
-            onSelectOutlet={(outlet) => {
-              setSelectedOutlet(outlet);
-              setOrderModalVisible(true);
-            }}
-            onOpenMap={() => setMapVisible(true)}
-          />
-        )}
-        {activeTab === "pesanan" && (
-          <OrdersScreen customerId={currentUser.id} />
-        )}
-        {activeTab === "profil" && (
-          <ProfileScreen
-            user={{
-              fullName: currentUser.fullName,
-              email: currentUser.email,
-            }}
-            onLogout={handleLogout}
-
         {showNotifications ? (
           <NotificationHistoryScreen
             customerId={currentUser.id}
             onBack={() => setShowNotifications(false)}
-
           />
         ) : (
           <>
@@ -120,6 +92,7 @@ export default function App() {
                   setSelectedCategory(category);
                   setOrderModalVisible(true);
                 }}
+                onOpenMap={() => setMapVisible(true)}
                 onOpenNotifications={() => setShowNotifications(true)}
               />
             )}

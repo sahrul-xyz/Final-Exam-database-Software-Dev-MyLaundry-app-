@@ -50,17 +50,12 @@ const QUICK_SERVICES: {
 
 export function HomeScreen({
   onSelectOutlet,
-
   onOpenMap,
-}: {
-  onSelectOutlet?: (outlet: Outlet) => void;
-  onOpenMap?: () => void;
-=======
   onOpenNotifications,
 }: {
   onSelectOutlet?: (outlet: Outlet, category?: ServiceCategory) => void;
+  onOpenMap?: () => void;
   onOpenNotifications?: () => void;
-
 }) {
   const [outlets, setOutlets] = useState<Outlet[]>(fallbackOutlets);
   const [refreshing, setRefreshing] = useState(false);
