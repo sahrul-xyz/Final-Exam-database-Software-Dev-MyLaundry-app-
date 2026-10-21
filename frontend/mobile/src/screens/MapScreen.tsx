@@ -1,12 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
-  Platform,
+  Linking,
 } from "react-native";
 import Constants from "expo-constants";
 import { WebView } from "react-native-webview";
@@ -18,18 +17,19 @@ import {
   centerForCoordinates,
   Coordinate,
   DEFAULT_MAP_REGION,
-  isValidCoordinate,
+  formatDistanceKm,
+  haversineDistanceKm,
   MappableOutlet,
   MapProvider,
+  resolveOutletCoordinates,
 } from "../utils/maps";
 
-/** API key Google Maps (JavaScript API) dari app.config.ts / .env */
 const GOOGLE_MAPS_API_KEY =
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
   (Constants.expoConfig?.extra?.googleMapsApiKey as string | undefined) ||
   "";
 
-const IS_WEB = Platform.OS === "web";
+type LocationState = "idle" | "loading" | "granted" | "denied";
 
 export function MapScreen({
   visible,
@@ -41,15 +41,60 @@ export function MapScreen({
   onSelectOutlet?: (outlet: Outlet) => void;
 }) {
   const webRef = useRef<WebView>(null);
+  const manualPickRef = useRef(false);
+
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [gpsLocation, setGpsLocation] = useState<Coordinate | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [locationState, setLocationState] = useState<LocationState>("idle");
   const [webReady, setWebReady] = useState(false);
-  // Google Maps dipakai bila API key tersedia, jika tidak -> OpenStreetMap.
   const [provider, setProvider] = useState<MapProvider>(
     GOOGLE_MAPS_API_KEY ? "google" : "osm"
   );
   const [usedFallback, setUsedFallback] = useState(false);
+  const [pickMode, setPickMode] = useState(false);
+
+  const requestLocation = useCallback(async () => {
+    setLocationState("loading");
+
+    try {
+      let permission = await Location.getForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        if (permission.status === "denied") {
+          setLocationState("denied");
+          return;
+        }
+        const requested = await Location.requestForegroundPermissionsAsync();
+        permission = requested;
+      }
+
+      if (permission.status !== "granted") {
+        setLocationState("denied");
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const coordinate = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+
+      setGpsLocation(coordinate);
+      setAccuracy(position.coords.accuracy ?? null);
+      if (!manualPickRef.current) {
+        setUserLocation(coordinate);
+      }
+      setLocationState("granted");
+    } catch {
+      setLocationState("denied");
+    }
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
@@ -69,25 +114,63 @@ export function MapScreen({
     };
   }, [visible]);
 
-  /** Outlet yang punya koordinat -> siap dijadikan marker. */
-  const mappableOutlets = useMemo<MappableOutlet[]>(
-    () =>
-      outlets
-        .filter((outlet) => isValidCoordinate(outlet))
-        .map((outlet) => ({
-          id: outlet.id,
-          name: outlet.name,
-          address: outlet.address,
-          distance: outlet.distance,
-          rating: outlet.rating,
-          price: outlet.price,
-          photo: outlet.photo,
-          latitude: outlet.latitude as number,
-          longitude: outlet.longitude as number,
-        })),
-    [outlets]
-  );
+  useEffect(() => {
+    if (!visible) return;
+    manualPickRef.current = false;
+    requestLocation();
+  }, [visible, requestLocation]);
 
+  useEffect(() => {
+    if (!visible || locationState !== "granted") return;
+
+    let active = true;
+    let subscription: { remove: () => void } | null = null;
+
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 5,
+        timeInterval: 10000,
+      },
+      (position) => {
+        if (!active) return;
+        const coordinate = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        setGpsLocation(coordinate);
+        if (!manualPickRef.current) {
+          setUserLocation(coordinate);
+          setAccuracy(position.coords.accuracy ?? null);
+        }
+      }
+    )
+      .then((sub) => {
+        subscription = sub;
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+      if (subscription) subscription.remove();
+    };
+  }, [visible, locationState]);
+
+  const mappableOutlets = useMemo<MappableOutlet[]>(() => {
+    const list = outlets.map((outlet) => ({
+      id: outlet.id,
+      name: outlet.name,
+      address: outlet.address,
+      distance: outlet.distance,
+      rating: outlet.rating,
+      price: outlet.price,
+      photo: outlet.photo,
+      latitude: outlet.latitude,
+      longitude: outlet.longitude,
+    }));
+
+    return resolveOutletCoordinates(list);
+  }, [outlets]);
   const center = useMemo(
     () =>
       centerForCoordinates(
@@ -95,7 +178,10 @@ export function MapScreen({
           latitude: o.latitude,
           longitude: o.longitude,
         })),
-        { latitude: DEFAULT_MAP_REGION.latitude, longitude: DEFAULT_MAP_REGION.longitude }
+        {
+          latitude: DEFAULT_MAP_REGION.latitude,
+          longitude: DEFAULT_MAP_REGION.longitude,
+        }
       ),
     [mappableOutlets]
   );
@@ -111,64 +197,122 @@ export function MapScreen({
     [mappableOutlets, center, provider]
   );
 
-  // Kirim lokasi pengguna ke peta setelah WebView siap dimuat
+  const nearestOutlet = useMemo(() => {
+    if (!userLocation || mappableOutlets.length === 0) return null;
+
+    let best: { outlet: MappableOutlet; km: number } | null = null;
+
+    for (const outlet of mappableOutlets) {
+      const km = haversineDistanceKm(userLocation, {
+        latitude: outlet.latitude,
+        longitude: outlet.longitude,
+      });
+      if (!best || km < best.km) {
+        best = { outlet, km };
+      }
+    }
+
+    return best;
+  }, [userLocation, mappableOutlets]);
+
+  const sendUserLocation = useCallback(
+    (centerOnMap: boolean) => {
+      if (!userLocation) return;
+
+      webRef.current?.injectJavaScript(`
+        window.postMessage(JSON.stringify({
+          type: 'userLocation',
+          lat: ${userLocation.latitude},
+          lng: ${userLocation.longitude},
+          accuracy: ${accuracy ?? 0},
+          center: ${centerOnMap ? "true" : "false"},
+          zoom: 16
+        }), '*');
+        true;
+      `);
+    },
+    [userLocation, accuracy]
+  );
+
   useEffect(() => {
     if (!webReady || !userLocation) return;
+    sendUserLocation(false);
+  }, [webReady, userLocation, accuracy, sendUserLocation]);
+
+  const centerOnUser = () => {
+    if (locationState !== "granted") {
+      requestLocation();
+      return;
+    }
+
+    if (gpsLocation) {
+      manualPickRef.current = false;
+      setUserLocation(gpsLocation);
+    }
+
     webRef.current?.injectJavaScript(`
-      window.postMessage(JSON.stringify({
-        type: 'userLocation',
-        lat: ${userLocation.latitude},
-        lng: ${userLocation.longitude}
-      }), '*');
+      window.postMessage(JSON.stringify({ type: 'centerUser', zoom: 16 }), '*');
       true;
     `);
-  }, [webReady, userLocation]);
+  };
 
-  const handleLocate = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Izin Lokasi Ditolak",
-          "Aktifkan izin lokasi pada pengaturan aplikasi untuk menampilkan posisi Anda."
-        );
-        return;
-      }
+  const togglePickMode = () => {
+    const next = !pickMode;
+    setPickMode(next);
 
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      setUserLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-    } catch {
-      Alert.alert(
-        "Gagal",
-        "Tidak dapat mengambil lokasi saat ini. Pastikan GPS perangkat aktif."
-      );
-    }
+    webRef.current?.injectJavaScript(`
+      window.postMessage(JSON.stringify({ type: 'setPickMode', enabled: ${next} }), '*');
+      true;
+    `);
   };
 
   const handleMessage = (event: { nativeEvent: { data: string } }) => {
+    let data: any;
+
     try {
-      const data = JSON.parse(event.nativeEvent.data);
-
-      if (data?.type === "order") {
-        const outlet = outlets.find((o) => o.id === data.id);
-        if (outlet) onSelectOutlet?.(outlet);
-        return;
-      }
-
-      // Tile Google Maps gagal dimuat -> otomatis pakai OpenStreetMap
-      if (data?.type === "tilesFailed" && provider === "google") {
-        setProvider("osm");
-        setUsedFallback(true);
-      }
+      data = JSON.parse(event.nativeEvent.data);
     } catch {
-      // abaikan pesan yang tidak valid
+      return;
     }
+
+    if (!data) return;
+
+    if (data.type === "order") {
+      const outlet = outlets.find((o) => o.id === data.id);
+      if (outlet) onSelectOutlet?.(outlet);
+      return;
+    }
+
+    if (data.type === "ready") {
+      setWebReady(true);
+      sendUserLocation(false);
+      return;
+    }
+
+    if (data.type === "userPicked") {
+      manualPickRef.current = true;
+      setUserLocation({
+        latitude: data.lat,
+        longitude: data.lng,
+      });
+      setAccuracy(null);
+      setPickMode(false);
+
+      webRef.current?.injectJavaScript(`
+        window.postMessage(JSON.stringify({ type: 'setPickMode', enabled: false }), '*');
+        true;
+      `);
+      return;
+    }
+
+    if (data.type === "tilesFailed" && provider === "google") {
+      setProvider("osm");
+      setUsedFallback(true);
+    }
+  };
+
+  const openSettings = () => {
+    Linking.openSettings().catch(() => undefined);
   };
 
   return (
@@ -180,10 +324,8 @@ export function MapScreen({
       />
 
       <View style={styles.popup}>
-        {/* ---------------- Handle ---------------- */}
         <View style={styles.handle} />
 
-        {/* ---------------- Header ---------------- */}
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle}>Peta Outlet</Text>
@@ -201,16 +343,6 @@ export function MapScreen({
           </TouchableOpacity>
         </View>
 
-        {!GOOGLE_MAPS_API_KEY && (
-          <View style={styles.warningBanner}>
-            <Text style={styles.warningText}>
-              API key Google Maps belum diatur, peta memakai OpenStreetMap.
-              Tambahkan EXPO_PUBLIC_GOOGLE_MAPS_API_KEY pada file .env lalu
-              restart server untuk memakai Google Maps.
-            </Text>
-          </View>
-        )}
-
         {usedFallback && (
           <View style={styles.warningBanner}>
             <Text style={styles.warningText}>
@@ -220,7 +352,40 @@ export function MapScreen({
           </View>
         )}
 
-        {/* ---------------- Peta ---------------- */}
+        {locationState === "denied" && (
+          <View style={styles.locationBanner}>
+            <Text style={styles.locationBannerText}>
+              Izin lokasi tidak aktif, posisi Anda belum ditandai di peta.
+            </Text>
+            <View style={styles.locationBannerActions}>
+              <TouchableOpacity
+                style={styles.locationBannerButton}
+                onPress={requestLocation}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.locationBannerButtonText}>Coba lagi</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationBannerButtonGhost}
+                onPress={openSettings}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.locationBannerButtonGhostText}>
+                  Buka pengaturan
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {pickMode && (
+          <View style={styles.pickBanner}>
+            <Text style={styles.pickBannerText}>
+              Ketuk peta untuk menandai posisi Anda sekarang
+            </Text>
+          </View>
+        )}
+
         <View style={styles.mapWrap}>
           <WebView
             ref={webRef}
@@ -242,14 +407,49 @@ export function MapScreen({
             </View>
           )}
 
-          {/* Tombol lokasi saya (mengambang di atas peta) */}
+          {locationState === "loading" && !loading && (
+            <View style={styles.mapStatus}>
+              <ActivityIndicator size="small" color="#0878f9" />
+              <Text style={styles.mapStatusText}>Mencari posisi Anda...</Text>
+            </View>
+          )}
+
           <TouchableOpacity
             style={styles.locateButton}
-            onPress={handleLocate}
+            onPress={centerOnUser}
             activeOpacity={0.8}
           >
             <Text style={styles.locateButtonText}>◎</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.pickButton, pickMode && styles.pickButtonActive]}
+            onPress={togglePickMode}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.pickButtonText}>📍</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Posisi Anda</Text>
+            <Text style={styles.infoValue}>
+              {userLocation
+                ? `${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}`
+                : "Belum ditemukan"}
+            </Text>
+          </View>
+
+          {nearestOutlet && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Outlet terdekat</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {nearestOutlet.outlet.name} ·{" "}
+                {formatDistanceKm(nearestOutlet.km)}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </View>
@@ -340,6 +540,58 @@ const styles = StyleSheet.create({
     color: "#8a5a08",
     fontWeight: "600",
   },
+  locationBanner: {
+    backgroundColor: "#eaf4ff",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#cfe6fb",
+  },
+  locationBannerText: {
+    fontSize: 11,
+    color: "#0b4f8f",
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  locationBannerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  locationBannerButton: {
+    backgroundColor: "#0878f9",
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 10,
+  },
+  locationBannerButtonText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  locationBannerButtonGhost: {
+    borderWidth: 1,
+    borderColor: "#0b4f8f",
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  locationBannerButtonGhostText: {
+    color: "#0b4f8f",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  pickBanner: {
+    backgroundColor: "rgba(9, 35, 77, 0.9)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  pickBannerText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   mapWrap: {
     flex: 1,
     marginHorizontal: 12,
@@ -368,6 +620,23 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "600",
   },
+  mapStatus: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  mapStatusText: {
+    marginLeft: 7,
+    fontSize: 11,
+    color: "#475569",
+    fontWeight: "700",
+  },
   locateButton: {
     position: "absolute",
     right: 14,
@@ -391,5 +660,57 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#ffffff",
     lineHeight: 24,
+  },
+  pickButton: {
+    position: "absolute",
+    left: 14,
+    bottom: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#0878f9",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
+    shadowColor: "#09234d",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+  },
+  pickButtonActive: {
+    backgroundColor: "#0878f9",
+    borderColor: "#ffffff",
+  },
+  pickButtonText: {
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  infoCard: {
+    borderTopWidth: 1,
+    borderTopColor: "#e4eaf1",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 14,
+    backgroundColor: "#ffffff",
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  infoLabel: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  infoValue: {
+    fontSize: 11,
+    color: "#09234d",
+    fontWeight: "700",
+    flexShrink: 1,
+    textAlign: "right",
   },
 });
