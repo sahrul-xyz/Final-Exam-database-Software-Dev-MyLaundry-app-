@@ -7,18 +7,55 @@ import {
   TouchableOpacity,
   ScrollView,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { Header } from "../components/Header";
 import { OutletCard } from "../components/OutletCard";
 import { getLiveOutlets, fallbackOutlets } from "../services/supabase";
-import { Outlet } from "../types";
+import { Outlet, ServiceCategory } from "../types";
+
+const QUICK_SERVICES: {
+  key: ServiceCategory;
+  name: string;
+  sub: string;
+  emoji: string;
+  bg: string;
+  color: string;
+}[] = [
+  {
+    key: "kiloan",
+    name: "Cuci Kiloan",
+    sub: "Mulai Rp7rb",
+    emoji: "👕",
+    bg: "#e4f2ff",
+    color: "#075ecf",
+  },
+  {
+    key: "express",
+    name: "Express",
+    sub: "Selesai cepat",
+    emoji: "⚡",
+    bg: "#fff4dc",
+    color: "#d98208",
+  },
+  {
+    key: "satuan",
+    name: "Satuan",
+    sub: "Per item",
+    emoji: "🏷️",
+    bg: "#e6f7ef",
+    color: "#169b62",
+  },
+];
 
 export function HomeScreen({
   onSelectOutlet,
   onOpenMap,
+  onOpenNotifications,
 }: {
-  onSelectOutlet?: (outlet: Outlet) => void;
+  onSelectOutlet?: (outlet: Outlet, category?: ServiceCategory) => void;
   onOpenMap?: () => void;
+  onOpenNotifications?: () => void;
 }) {
   const [outlets, setOutlets] = useState<Outlet[]>(fallbackOutlets);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,8 +75,19 @@ export function HomeScreen({
   const filteredOutlets = outlets.filter(
     (o) =>
       o.name.toLowerCase().includes(search.toLowerCase()) ||
-      o.address.toLowerCase().includes(search.toLowerCase())
+      o.address.toLowerCase().includes(search.toLowerCase()),
   );
+
+  // Klik kategori -> langsung buka form pesanan dengan outlet teratas.
+  // Outlet bisa diganti di dalam modal lewat tombol "Ganti".
+  const handleSelectCategory = (key: ServiceCategory) => {
+    const target = filteredOutlets[0] ?? outlets[0];
+    if (!target) {
+      Alert.alert("Perhatian", "Belum ada outlet yang tersedia.");
+      return;
+    }
+    onSelectOutlet?.(target, key);
+  };
 
   return (
     <ScrollView
@@ -50,7 +98,7 @@ export function HomeScreen({
         <RefreshControl refreshing={refreshing} onRefresh={loadData} />
       }
     >
-      <Header />
+      <Header onNotificationPress={onOpenNotifications} />
 
       <View style={styles.welcomeSection}>
         <Text style={styles.greeting}>Selamat pagi,</Text>
@@ -71,29 +119,22 @@ export function HomeScreen({
       </View>
 
       <View style={styles.quickServices}>
-        <TouchableOpacity style={styles.serviceButton} activeOpacity={0.8}>
-          <View style={[styles.serviceIconWrap, { backgroundColor: "#e4f2ff" }]}>
-            <Text style={[styles.serviceEmoji, { color: "#075ecf" }]}>👕</Text>
-          </View>
-          <Text style={styles.serviceName}>Cuci Kiloan</Text>
-          <Text style={styles.serviceSub}>Mulai Rp7rb</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.serviceButton} activeOpacity={0.8}>
-          <View style={[styles.serviceIconWrap, { backgroundColor: "#fff4dc" }]}>
-            <Text style={[styles.serviceEmoji, { color: "#d98208" }]}>⚡</Text>
-          </View>
-          <Text style={styles.serviceName}>Express</Text>
-          <Text style={styles.serviceSub}>Selesai cepat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.serviceButton} activeOpacity={0.8}>
-          <View style={[styles.serviceIconWrap, { backgroundColor: "#e6f7ef" }]}>
-            <Text style={[styles.serviceEmoji, { color: "#169b62" }]}>🏷️</Text>
-          </View>
-          <Text style={styles.serviceName}>Satuan</Text>
-          <Text style={styles.serviceSub}>Per item</Text>
-        </TouchableOpacity>
+        {QUICK_SERVICES.map((s) => (
+          <TouchableOpacity
+            key={s.key}
+            style={styles.serviceButton}
+            activeOpacity={0.8}
+            onPress={() => handleSelectCategory(s.key)}
+          >
+            <View style={[styles.serviceIconWrap, { backgroundColor: s.bg }]}>
+              <Text style={[styles.serviceEmoji, { color: s.color }]}>
+                {s.emoji}
+              </Text>
+            </View>
+            <Text style={styles.serviceName}>{s.name}</Text>
+            <Text style={styles.serviceSub}>{s.sub}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <View style={styles.sectionHeader}>
@@ -115,7 +156,7 @@ export function HomeScreen({
           <OutletCard
             key={outlet.id}
             outlet={outlet}
-            onPress={() => onSelectOutlet && onSelectOutlet(outlet)}
+            onPress={() => onSelectOutlet?.(outlet)}
           />
         ))}
       </View>

@@ -1,11 +1,5 @@
 
 
----
-
-## 📁 Repository Structure
-
-Adheres strictly to PRD v1.2 specifications:
-
 ```text
 MyLaundry/
 ├── frontend/
