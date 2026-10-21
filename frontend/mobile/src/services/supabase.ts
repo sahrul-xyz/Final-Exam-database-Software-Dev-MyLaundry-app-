@@ -34,6 +34,8 @@ export const fallbackOutlets: Outlet[] = [
     photo:
       "https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080",
     verified: true,
+    latitude: -6.85843,
+    longitude: 107.59003,
   },
   {
     id: "a0000000-0000-0000-0000-000000000002",
@@ -46,6 +48,8 @@ export const fallbackOutlets: Outlet[] = [
     photo:
       "https://images.unsplash.com/photo-1765163076573-26499e530ec8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=80&w=900",
     verified: true,
+    latitude: -6.88876,
+    longitude: 107.61359,
   },
 ];
 
@@ -73,9 +77,26 @@ export const fallbackServices: LaundryServiceItem[] = [
   },
 ];
 
+/**
+ * Koordinat cadangan untuk outlet seed, dipakai ketika kolom
+ * latitude/longitude belum tersedia di database (migration belum di-push).
+ */
+const OUTLET_COORDINATE_FALLBACK: Record<string, { latitude: number; longitude: number }> = {
+  "a0000000-0000-0000-0000-000000000001": {
+    latitude: -6.85843,
+    longitude: 107.59003,
+  },
+  "a0000000-0000-0000-0000-000000000002": {
+    latitude: -6.88876,
+    longitude: 107.61359,
+  },
+};
+
 export async function getLiveOutlets(): Promise<Outlet[]> {
   try {
-    const { data, error } = await supabase
+    // 1. Coba query lengkap (dengan koordinat) — dipakai bila migration
+    //    20261020000002_outlet_geolocation.sql sudah di-push.
+    let { data, error } = await supabase
       .from("laundry_outlets")
       .select(`
         id,
@@ -83,13 +104,42 @@ export async function getLiveOutlets(): Promise<Outlet[]> {
         address_text,
         is_active,
         photo_url,
+        latitude,
+        longitude,
         created_at,
         laundry_services ( price )
       `)
       .eq("is_active", true)
       .order("created_at", { ascending: false });
 
-    if (error || !data || data.length === 0) {
+    // 2. Kolom latitude/longitude belum ada -> query tanpa koordinat,
+    //    lalu pasangkan dengan koordinat cadangan.
+    if (error) {
+      const retry = await supabase
+        .from("laundry_outlets")
+        .select(`
+          id,
+          name,
+          address_text,
+          is_active,
+          photo_url,
+          created_at,
+          laundry_services ( price )
+        `)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (retry.error || !retry.data || retry.data.length === 0) {
+        return fallbackOutlets;
+      }
+
+      data = retry.data.map((item: any) => {
+        const coord = OUTLET_COORDINATE_FALLBACK[item.id];
+        return { ...item, latitude: coord?.latitude ?? null, longitude: coord?.longitude ?? null };
+      });
+    }
+
+    if (!data || data.length === 0) {
       return fallbackOutlets;
     }
 
@@ -111,6 +161,8 @@ export async function getLiveOutlets(): Promise<Outlet[]> {
           item.photo_url ||
           "https://images.unsplash.com/photo-1790876687829-7b27e0576036?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=82&w=1080",
         verified: true,
+        latitude: item.latitude ?? null,
+        longitude: item.longitude ?? null,
       };
     });
   } catch {

@@ -50,9 +50,11 @@ const QUICK_SERVICES: {
 
 export function HomeScreen({
   onSelectOutlet,
+  onOpenMap,
   onOpenNotifications,
 }: {
   onSelectOutlet?: (outlet: Outlet, category?: ServiceCategory) => void;
+  onOpenMap?: () => void;
   onOpenNotifications?: () => void;
 }) {
   const [outlets, setOutlets] = useState<Outlet[]>(fallbackOutlets);
@@ -140,7 +142,11 @@ export function HomeScreen({
           <Text style={styles.sectionEyebrow}>DI SEKITARMU</Text>
           <Text style={styles.sectionTitle}>Outlet pilihan</Text>
         </View>
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={onOpenMap}
+          activeOpacity={0.7}
+          style={styles.seeMapButton}
+        >
           <Text style={styles.seeMapText}>Lihat peta</Text>
         </TouchableOpacity>
       </View>
@@ -264,6 +270,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#0878f9",
+  },
+  seeMapButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 6,
   },
   outletList: {
     paddingHorizontal: 20,
