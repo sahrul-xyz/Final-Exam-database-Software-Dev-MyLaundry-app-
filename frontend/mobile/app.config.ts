@@ -1,17 +1,6 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
-/**
- * Konfigurasi dinamis Expo (menggantikan nilai statis di app.json).
- *
- * Google Maps API key diambil dari environment variable:
- *   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY  -> key yang dipakai di dalam app ( Expo Go / development build )
- *   GOOGLE_MAPS_API_KEY              -> fallback untuk konfigurasi native
- *
- * Cara mendapatkan key:
- *   1. Buka https://console.cloud.google.com/ > buat/ pilih project
- *   2. Aktifkan "Maps SDK for Android" dan "Maps SDK for iOS"
- *   3. Buat API key, lalu batasi (Restrictions) berdasarkan package name / bundle id
- */
+
 const googleMapsApiKey =
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
   process.env.GOOGLE_MAPS_API_KEY ||
