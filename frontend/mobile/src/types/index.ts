@@ -68,6 +68,7 @@ export interface CustomerOrder {
   paymentStatus: string;
   serviceDate: string;
   createdAt: string;
+  notes?: string | null;
   /** True jika pesanan ini sudah memiliki ulasan tersimpan di Supabase. */
   hasReview?: boolean;
   items: OrderItem[];

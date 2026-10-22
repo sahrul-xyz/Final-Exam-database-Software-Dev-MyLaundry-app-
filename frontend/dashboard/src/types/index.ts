@@ -69,6 +69,7 @@ export interface PartnerOrder {
   subtotal_estimate: number;
   final_service_amount: number | null;
   created_at: string;
+  notes?: string | null;
   items: OrderItem[];
 }
 

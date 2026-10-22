@@ -332,6 +332,13 @@ export function OrdersScreen({
                       </View>
                     </View>
 
+                    {order.notes ? (
+                      <View style={{ backgroundColor: "#eff6ff", padding: 10, borderRadius: 8, marginTop: 8, borderWidth: 1, borderColor: "#bfdbfe" }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: "#1d4ed8" }}>🏷️ Catatan & Jadwal Pakaian:</Text>
+                        <Text style={{ fontSize: 12, color: "#1e293b", marginTop: 2 }}>{order.notes}</Text>
+                      </View>
+                    ) : null}
+
                     {/* Status 1: Menunggu Persetujuan Biaya dari Pelanggan */}
                     {order.status === "awaiting_customer_approval" && (
                       <View style={styles.actionBanner}>
@@ -424,6 +431,12 @@ export function OrdersScreen({
                       </Text>
                       <Text style={styles.orderNumber}>{item.orderNumber}</Text>
                     </View>
+
+                    {item.notes ? (
+                      <View style={{ backgroundColor: "#f8fafc", padding: 8, borderRadius: 6, marginTop: 6, borderWidth: 1, borderColor: "#e2e8f0" }}>
+                        <Text style={{ fontSize: 11, color: "#475569" }}>🏷️ {item.notes}</Text>
+                      </View>
+                    ) : null}
 
                     {/* Tombol Ulasan & Komplain untuk Pesanan Selesai */}
                     {isCompleted && (

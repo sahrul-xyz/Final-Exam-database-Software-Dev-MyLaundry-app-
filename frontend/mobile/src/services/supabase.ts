@@ -287,6 +287,7 @@ export async function createCustomerOrder(params: {
   quantity: number;
   handoverMethod: HandoverMethod;
   paymentMethod: PaymentMethod;
+  notes?: string;
 }): Promise<{ order: CustomerOrder | null; error: string | null }> {
   try {
     const totalEstimate = params.service.price * params.quantity;
@@ -320,6 +321,7 @@ export async function createCustomerOrder(params: {
         p_quantity: params.quantity,
         p_unit: unit,
         p_subtotal: totalEstimate,
+        p_notes: params.notes || null,
       }
     );
 
@@ -349,6 +351,7 @@ export async function createCustomerOrder(params: {
           partner_response_deadline: new Date(
             Date.now() + 30 * 60 * 1000
           ).toISOString(),
+          notes: params.notes || null,
         })
         .select("id, order_number, status, created_at")
         .single();
@@ -382,7 +385,7 @@ export async function createCustomerOrder(params: {
         old_status: null,
         new_status: initialStatus,
         changed_by: params.customerId,
-        note: "Pesanan dibuat oleh pelanggan",
+        note: params.notes ? "Pesanan dibuat. Catatan: " + params.notes : "Pesanan dibuat oleh pelanggan",
       });
     }
 
@@ -398,6 +401,7 @@ export async function createCustomerOrder(params: {
       paymentStatus: "pending",
       serviceDate,
       createdAt: finalCreatedAt,
+      notes: params.notes || null,
       items: [
         {
           serviceName: params.service.name,
@@ -434,6 +438,7 @@ export async function fetchCustomerOrders(
         final_service_amount,
         payment_method,
         payment_status,
+        notes,
         service_date,
         created_at,
         laundry_outlets ( name ),
@@ -478,6 +483,7 @@ export async function fetchCustomerOrders(
       paymentStatus: o.payment_status,
       serviceDate: o.service_date,
       createdAt: o.created_at,
+      notes: o.notes || null,
       hasReview: reviewedOrderIds.has(o.id),
       items: (o.order_items || []).map((it: any) => ({
         id: it.id,

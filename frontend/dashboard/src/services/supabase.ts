@@ -834,6 +834,7 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
         payment_status,
         subtotal_estimate,
         final_service_amount,
+        notes,
         created_at,
         order_items (
           id,
@@ -896,6 +897,7 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
           ? Number(item.final_service_amount)
           : null,
         created_at: item.created_at,
+        notes: item.notes || null,
         items: (item.order_items || []).map((o: any) => ({
           id: o.id,
           service_name_snapshot: o.service_name_snapshot,
