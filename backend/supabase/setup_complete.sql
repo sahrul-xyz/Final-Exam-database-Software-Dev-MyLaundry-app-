@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     partner_response_deadline TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     complaint_deadline TIMESTAMPTZ,
+    notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -471,7 +472,8 @@ CREATE OR REPLACE FUNCTION public.create_order_atomic(
     p_unit_price NUMERIC,
     p_quantity NUMERIC,
     p_unit TEXT,
-    p_subtotal NUMERIC
+    p_subtotal NUMERIC,
+    p_notes TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -484,6 +486,7 @@ DECLARE
     v_created_at TIMESTAMPTZ;
     v_payment_deadline TIMESTAMPTZ;
     v_partner_deadline TIMESTAMPTZ;
+    v_audit_note TEXT;
 BEGIN
     IF p_quantity <= 0 THEN
         RAISE EXCEPTION 'Kuantitas pesanan minimal harus lebih besar dari 0 (Diterima: %)', p_quantity;
@@ -522,6 +525,7 @@ BEGIN
         payment_status,
         payment_deadline,
         partner_response_deadline,
+        notes,
         created_at,
         updated_at
     ) VALUES (
@@ -536,6 +540,7 @@ BEGIN
         'pending',
         v_payment_deadline,
         v_partner_deadline,
+        p_notes,
         now(),
         now()
     ) RETURNING id, created_at INTO v_order_id, v_created_at;
@@ -572,7 +577,7 @@ BEGIN
         NULL,
         v_status,
         p_customer_id,
-        'Pesanan dibuat via Stored Procedure create_order_atomic',
+        COALESCE('Pesanan dibuat. Catatan: ' || p_notes, 'Pesanan dibuat via Stored Procedure create_order_atomic'),
         now()
     );
 
@@ -609,7 +614,35 @@ EXCEPTION
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.create_order_atomic TO anon, authenticated, service_role;
+-- Overload fungsi 11 parameter untuk kompatibilitas mundur
+CREATE OR REPLACE FUNCTION public.create_order_atomic(
+    p_customer_id UUID,
+    p_outlet_id UUID,
+    p_service_date DATE,
+    p_handover_method TEXT,
+    p_payment_method TEXT,
+    p_service_id UUID,
+    p_service_name TEXT,
+    p_unit_price NUMERIC,
+    p_quantity NUMERIC,
+    p_unit TEXT,
+    p_subtotal NUMERIC
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN public.create_order_atomic(
+        p_customer_id, p_outlet_id, p_service_date, p_handover_method,
+        p_payment_method, p_service_id, p_service_name, p_unit_price,
+        p_quantity, p_unit, p_subtotal, NULL
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.create_order_atomic(UUID, UUID, DATE, TEXT, TEXT, UUID, TEXT, NUMERIC, NUMERIC, TEXT, NUMERIC, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.create_order_atomic(UUID, UUID, DATE, TEXT, TEXT, UUID, TEXT, NUMERIC, NUMERIC, TEXT, NUMERIC) TO anon, authenticated, service_role;
 
 -- -------------------------------------------------------
 -- IK301: QUERY ANALITIK DASHBOARD (JOIN & Agregasi)

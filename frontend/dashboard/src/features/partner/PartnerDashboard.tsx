@@ -449,6 +449,11 @@ export function PartnerDashboard({
                     {weighingOrder.items?.[0]?.service_name_snapshot || "Cuci Laundry"}
                   </strong>
                 </div>
+                {weighingOrder.notes && (
+                  <div style={{ marginTop: "8px", padding: "8px", background: "#eff6ff", borderRadius: "6px", fontSize: "11px", color: "#1d4ed8" }}>
+                    <strong>Catatan:</strong> {weighingOrder.notes}
+                  </div>
+                )}
               </div>
 
               <label style={{ display: "block", fontSize: "12px", fontWeight: 700, marginBottom: "6px" }}>
@@ -564,6 +569,17 @@ export function PartnerDashboard({
                   {selectedOrder.payment_method === "digital" ? "Transfer / QRIS (Lunas)" : "Tunai saat serah terima"}
                 </strong>
               </div>
+
+              {selectedOrder.notes && (
+                <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "10px", borderRadius: "8px" }}>
+                  <strong style={{ display: "block", color: "#1d4ed8", marginBottom: "4px" }}>
+                    🏷️ Catatan Pakaian & Preferensi Jemput:
+                  </strong>
+                  <div style={{ color: "#1e293b", fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                    {selectedOrder.notes}
+                  </div>
+                </div>
+              )}
 
               <div style={{ background: "#f8fafc", padding: "10px", borderRadius: "8px" }}>
                 <strong style={{ display: "block", marginBottom: "6px" }}>Rincian Layanan:</strong>
@@ -830,6 +846,26 @@ function OrderTable({
                   >
                     <strong style={{ color: "var(--blue-700)" }}>{order.order_number}</strong>
                     <small>{formatRelativeTime(order.created_at)}</small>
+                    {order.notes && (
+                      <span
+                        title={order.notes}
+                        style={{
+                          display: "inline-block",
+                          maxWidth: "140px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontSize: "10px",
+                          color: "#1d4ed8",
+                          background: "#eff6ff",
+                          borderRadius: "4px",
+                          padding: "1px 4px",
+                          marginTop: "2px",
+                        }}
+                      >
+                        🏷️ {order.notes}
+                      </span>
+                    )}
                   </button>
                 </td>
 
