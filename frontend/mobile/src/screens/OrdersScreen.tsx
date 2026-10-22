@@ -112,23 +112,36 @@ export function OrdersScreen({
   };
 
   const handleSubmitReview = async () => {
-    if (!reviewOrder || !customerId) return;
+    if (!reviewOrder || !customerId || submittingReview) return;
+    if (!reviewComment.trim()) {
+      Alert.alert("Ulasan belum lengkap", "Tulis komentar ulasan terlebih dahulu.");
+      return;
+    }
+
     setSubmittingReview(true);
-    const { success, error } = await submitCustomerReview({
-      orderId: reviewOrder.id,
-      customerId,
-      outletId: reviewOrder.outletId,
-      rating,
-      comment: reviewComment,
-    });
-    setSubmittingReview(false);
-    if (success) {
-      Alert.alert("Terima Kasih!", "Ulasan dan rating Anda telah berhasil dikirim.");
-      setReviewOrder(null);
-      setReviewComment("");
-      setRating(5);
-    } else {
-      Alert.alert("Gagal", error || "Gagal mengirim ulasan");
+    try {
+      const { success, error } = await submitCustomerReview({
+        orderId: reviewOrder.id,
+        customerId,
+        outletId: reviewOrder.outletId,
+        rating,
+        comment: reviewComment.trim(),
+      });
+
+      if (success) {
+        setReviewOrder(null);
+        setReviewComment("");
+        setRating(5);
+        await loadOrders();
+        Alert.alert("Terima Kasih!", "Ulasan dan rating Anda telah berhasil dikirim.");
+      } else {
+        Alert.alert("Gagal mengirim ulasan", error || "Gagal mengirim ulasan. Silakan coba lagi.");
+      }
+    } catch (err) {
+      console.error("Gagal mengirim ulasan dari layar pesanan:", err);
+      Alert.alert("Gagal", "Terjadi kesalahan. Periksa koneksi internet lalu coba lagi.");
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -415,13 +428,25 @@ export function OrdersScreen({
                     {/* Tombol Ulasan & Komplain untuk Pesanan Selesai */}
                     {isCompleted && (
                       <View style={styles.historyButtonsRow}>
-                        <TouchableOpacity
-                          style={styles.reviewBtn}
-                          onPress={() => setReviewOrder(item)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.reviewBtnText}>⭐ Beri Ulasan</Text>
-                        </TouchableOpacity>
+                        {item.hasReview ? (
+                          <View style={[styles.reviewBtn, styles.reviewBtnDone]}>
+                            <Text style={[styles.reviewBtnText, styles.reviewBtnDoneText]}>
+                              ✓ Sudah Diulas
+                            </Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.reviewBtn}
+                            onPress={() => {
+                              setRating(5);
+                              setReviewComment("");
+                              setReviewOrder(item);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.reviewBtnText}>⭐ Beri Ulasan</Text>
+                          </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                           style={styles.complaintBtn}
                           onPress={() => setComplaintOrder(item)}
@@ -475,6 +500,8 @@ export function OrdersScreen({
                 placeholderTextColor="#94a3b8"
                 multiline
                 numberOfLines={3}
+                maxLength={500}
+                textAlignVertical="top"
                 value={reviewComment}
                 onChangeText={setReviewComment}
               />
@@ -828,6 +855,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#0878f9",
     fontWeight: "700",
+  },
+  reviewBtnDone: {
+    backgroundColor: "#f0fdf4",
+    justifyContent: "center",
+  },
+  reviewBtnDoneText: {
+    color: "#15803d",
   },
   complaintBtn: {
     flex: 1.2,

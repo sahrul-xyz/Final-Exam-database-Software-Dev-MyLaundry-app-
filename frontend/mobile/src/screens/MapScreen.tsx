@@ -1,11 +1,20 @@
+<<<<<<< HEAD
+import React, { useEffect, useMemo, useRef, useState } from "react";
+=======
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+<<<<<<< HEAD
+  Alert,
+  Platform,
+=======
   Linking,
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 } from "react-native";
 import Constants from "expo-constants";
 import { WebView } from "react-native-webview";
@@ -17,6 +26,14 @@ import {
   centerForCoordinates,
   Coordinate,
   DEFAULT_MAP_REGION,
+<<<<<<< HEAD
+  isValidCoordinate,
+  MappableOutlet,
+  MapProvider,
+} from "../utils/maps";
+
+/** API key Google Maps (JavaScript API) dari app.config.ts / .env */
+=======
   formatDistanceKm,
   haversineDistanceKm,
   MappableOutlet,
@@ -24,12 +41,17 @@ import {
   resolveOutletCoordinates,
 } from "../utils/maps";
 
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 const GOOGLE_MAPS_API_KEY =
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
   (Constants.expoConfig?.extra?.googleMapsApiKey as string | undefined) ||
   "";
 
+<<<<<<< HEAD
+const IS_WEB = Platform.OS === "web";
+=======
 type LocationState = "idle" | "loading" | "granted" | "denied";
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 
 export function MapScreen({
   visible,
@@ -41,6 +63,13 @@ export function MapScreen({
   onSelectOutlet?: (outlet: Outlet) => void;
 }) {
   const webRef = useRef<WebView>(null);
+<<<<<<< HEAD
+  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [webReady, setWebReady] = useState(false);
+  // Google Maps dipakai bila API key tersedia, jika tidak -> OpenStreetMap.
+=======
   const manualPickRef = useRef(false);
 
   const [outlets, setOutlets] = useState<Outlet[]>([]);
@@ -50,10 +79,13 @@ export function MapScreen({
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [locationState, setLocationState] = useState<LocationState>("idle");
   const [webReady, setWebReady] = useState(false);
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   const [provider, setProvider] = useState<MapProvider>(
     GOOGLE_MAPS_API_KEY ? "google" : "osm"
   );
   const [usedFallback, setUsedFallback] = useState(false);
+<<<<<<< HEAD
+=======
   const [pickMode, setPickMode] = useState(false);
 
   const requestLocation = useCallback(async () => {
@@ -95,6 +127,7 @@ export function MapScreen({
       setLocationState("denied");
     }
   }, []);
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 
   useEffect(() => {
     if (!visible) return;
@@ -114,6 +147,27 @@ export function MapScreen({
     };
   }, [visible]);
 
+<<<<<<< HEAD
+  /** Outlet yang punya koordinat -> siap dijadikan marker. */
+  const mappableOutlets = useMemo<MappableOutlet[]>(
+    () =>
+      outlets
+        .filter((outlet) => isValidCoordinate(outlet))
+        .map((outlet) => ({
+          id: outlet.id,
+          name: outlet.name,
+          address: outlet.address,
+          distance: outlet.distance,
+          rating: outlet.rating,
+          price: outlet.price,
+          photo: outlet.photo,
+          latitude: outlet.latitude as number,
+          longitude: outlet.longitude as number,
+        })),
+    [outlets]
+  );
+
+=======
   useEffect(() => {
     if (!visible) return;
     manualPickRef.current = false;
@@ -171,6 +225,7 @@ export function MapScreen({
 
     return resolveOutletCoordinates(list);
   }, [outlets]);
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   const center = useMemo(
     () =>
       centerForCoordinates(
@@ -178,10 +233,14 @@ export function MapScreen({
           latitude: o.latitude,
           longitude: o.longitude,
         })),
+<<<<<<< HEAD
+        { latitude: DEFAULT_MAP_REGION.latitude, longitude: DEFAULT_MAP_REGION.longitude }
+=======
         {
           latitude: DEFAULT_MAP_REGION.latitude,
           longitude: DEFAULT_MAP_REGION.longitude,
         }
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
       ),
     [mappableOutlets]
   );
@@ -197,6 +256,66 @@ export function MapScreen({
     [mappableOutlets, center, provider]
   );
 
+<<<<<<< HEAD
+  // Kirim lokasi pengguna ke peta setelah WebView siap dimuat
+  useEffect(() => {
+    if (!webReady || !userLocation) return;
+    webRef.current?.injectJavaScript(`
+      window.postMessage(JSON.stringify({
+        type: 'userLocation',
+        lat: ${userLocation.latitude},
+        lng: ${userLocation.longitude}
+      }), '*');
+      true;
+    `);
+  }, [webReady, userLocation]);
+
+  const handleLocate = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Izin Lokasi Ditolak",
+          "Aktifkan izin lokasi pada pengaturan aplikasi untuk menampilkan posisi Anda."
+        );
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setUserLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+    } catch {
+      Alert.alert(
+        "Gagal",
+        "Tidak dapat mengambil lokasi saat ini. Pastikan GPS perangkat aktif."
+      );
+    }
+  };
+
+  const handleMessage = (event: { nativeEvent: { data: string } }) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+
+      if (data?.type === "order") {
+        const outlet = outlets.find((o) => o.id === data.id);
+        if (outlet) onSelectOutlet?.(outlet);
+        return;
+      }
+
+      // Tile Google Maps gagal dimuat -> otomatis pakai OpenStreetMap
+      if (data?.type === "tilesFailed" && provider === "google") {
+        setProvider("osm");
+        setUsedFallback(true);
+      }
+    } catch {
+      // abaikan pesan yang tidak valid
+    }
+=======
   const nearestOutlet = useMemo(() => {
     if (!userLocation || mappableOutlets.length === 0) return null;
 
@@ -313,6 +432,7 @@ export function MapScreen({
 
   const openSettings = () => {
     Linking.openSettings().catch(() => undefined);
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   };
 
   return (
@@ -324,8 +444,15 @@ export function MapScreen({
       />
 
       <View style={styles.popup}>
+<<<<<<< HEAD
+        {/* ---------------- Handle ---------------- */}
         <View style={styles.handle} />
 
+        {/* ---------------- Header ---------------- */}
+=======
+        <View style={styles.handle} />
+
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle}>Peta Outlet</Text>
@@ -343,6 +470,19 @@ export function MapScreen({
           </TouchableOpacity>
         </View>
 
+<<<<<<< HEAD
+        {!GOOGLE_MAPS_API_KEY && (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningText}>
+              API key Google Maps belum diatur, peta memakai OpenStreetMap.
+              Tambahkan EXPO_PUBLIC_GOOGLE_MAPS_API_KEY pada file .env lalu
+              restart server untuk memakai Google Maps.
+            </Text>
+          </View>
+        )}
+
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         {usedFallback && (
           <View style={styles.warningBanner}>
             <Text style={styles.warningText}>
@@ -352,6 +492,9 @@ export function MapScreen({
           </View>
         )}
 
+<<<<<<< HEAD
+        {/* ---------------- Peta ---------------- */}
+=======
         {locationState === "denied" && (
           <View style={styles.locationBanner}>
             <Text style={styles.locationBannerText}>
@@ -386,6 +529,7 @@ export function MapScreen({
           </View>
         )}
 
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         <View style={styles.mapWrap}>
           <WebView
             ref={webRef}
@@ -407,6 +551,12 @@ export function MapScreen({
             </View>
           )}
 
+<<<<<<< HEAD
+          {/* Tombol lokasi saya (mengambang di atas peta) */}
+          <TouchableOpacity
+            style={styles.locateButton}
+            onPress={handleLocate}
+=======
           {locationState === "loading" && !loading && (
             <View style={styles.mapStatus}>
               <ActivityIndicator size="small" color="#0878f9" />
@@ -417,10 +567,13 @@ export function MapScreen({
           <TouchableOpacity
             style={styles.locateButton}
             onPress={centerOnUser}
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
             activeOpacity={0.8}
           >
             <Text style={styles.locateButtonText}>◎</Text>
           </TouchableOpacity>
+<<<<<<< HEAD
+=======
 
           <TouchableOpacity
             style={[styles.pickButton, pickMode && styles.pickButtonActive]}
@@ -450,6 +603,7 @@ export function MapScreen({
               </Text>
             </View>
           )}
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         </View>
       </View>
     </View>
@@ -540,6 +694,8 @@ const styles = StyleSheet.create({
     color: "#8a5a08",
     fontWeight: "600",
   },
+<<<<<<< HEAD
+=======
   locationBanner: {
     backgroundColor: "#eaf4ff",
     paddingHorizontal: 14,
@@ -592,6 +748,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   mapWrap: {
     flex: 1,
     marginHorizontal: 12,
@@ -620,6 +777,8 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "600",
   },
+<<<<<<< HEAD
+=======
   mapStatus: {
     position: "absolute",
     top: 12,
@@ -637,6 +796,7 @@ const styles = StyleSheet.create({
     color: "#475569",
     fontWeight: "700",
   },
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   locateButton: {
     position: "absolute",
     right: 14,
@@ -661,6 +821,8 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     lineHeight: 24,
   },
+<<<<<<< HEAD
+=======
   pickButton: {
     position: "absolute",
     left: 14,
@@ -713,4 +875,5 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: "right",
   },
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 });

@@ -3,6 +3,18 @@ export interface Coordinate {
   longitude: number;
 }
 
+<<<<<<< HEAD
+/** Titik tengah default (Kota Bandung) bila lokasi outlet tidak tersedia. */
+export const DEFAULT_MAP_REGION = {
+  latitude: -6.875,
+  longitude: 107.601,
+  latitudeDelta: 0.12,
+  longitudeDelta: 0.12,
+};
+
+/** Outlet yang siap ditampilkan sebagai marker pada peta. */
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 export interface MappableOutlet {
   id: string;
   name: string;
@@ -13,6 +25,19 @@ export interface MappableOutlet {
   photo?: string;
   latitude: number;
   longitude: number;
+<<<<<<< HEAD
+}
+
+/** Penyedia peta yang dipakai di dalam WebView. */
+export type MapProvider = "google" | "osm";
+
+/** URL tile OpenStreetMap standar (tanpa API key). */
+export const OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+/**
+ * Memeriksa apakah koordinat valid dan bisa dipakai sebagai marker peta.
+ */
+=======
   approximate?: boolean;
 }
 
@@ -27,6 +52,7 @@ export const DEFAULT_MAP_REGION = {
 
 export const OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 export function isValidCoordinate(coord?: {
   latitude?: number | null;
   longitude?: number | null;
@@ -38,6 +64,12 @@ export function isValidCoordinate(coord?: {
   return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
 }
 
+<<<<<<< HEAD
+/**
+ * Menghitung titik tengah dari sekumpulan koordinat.
+ */
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 export function centerForCoordinates(
   coordinates: Coordinate[],
   fallback: Coordinate = {
@@ -58,6 +90,12 @@ export function centerForCoordinates(
   };
 }
 
+<<<<<<< HEAD
+/**
+ * Menghitung region awal peta agar seluruh marker outlet terlihat.
+ */
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 export function regionForCoordinates(
   coordinates: Coordinate[],
   fallback = DEFAULT_MAP_REGION
@@ -75,6 +113,10 @@ export function regionForCoordinates(
   const centerLatitude = (minLat + maxLat) / 2;
   const centerLongitude = (minLng + maxLng) / 2;
 
+<<<<<<< HEAD
+  // Padding minimal agar marker tidak menempel di tepi peta
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   const latitudeDelta = Math.max((maxLat - minLat) * 1.6, 0.02);
   const longitudeDelta = Math.max((maxLng - minLng) * 1.6, 0.02);
 
@@ -86,6 +128,34 @@ export function regionForCoordinates(
   };
 }
 
+<<<<<<< HEAD
+/** Meloloskan teks agar aman disisipkan ke dalam HTML/JS. */
+function escapeHtml(value: string): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** CSS dasar yang dipakai bersama oleh kedua penyedia peta. */
+const BASE_STYLE = `
+      html, body, #map { height: 100%; margin: 0; padding: 0; }
+      body { background: #eaf4ff; font-family: -apple-system, Roboto, sans-serif; }
+      .mylauncher { border-radius: 12px; overflow: hidden; }
+`;
+
+/**
+ * Komponen InfoWindow/Popup untuk detail outlet.
+ * Tombol "Pesan" mengirim pesan balik ke aplikasi React Native.
+ */
+function buildInfoContentScript(): string {
+  return `
+        function infoContent(o) {
+          return (
+            '<div style="min-width:190px;padding:12px 14px;">' +
+=======
 export function haversineDistanceKm(from: Coordinate, to: Coordinate): number {
   const earthRadiusKm = 6371;
   const toRadians = (value: number) => (value * Math.PI) / 180;
@@ -279,6 +349,7 @@ const SHARED_SCRIPT = `
           return (
             '<div style="min-width:200px;padding:12px 14px;">' +
             photo +
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
             '<div style="font-size:13px;font-weight:800;color:#09234d;margin-bottom:5px;">' +
             escapeText(o.name) +
             '</div>' +
@@ -288,11 +359,18 @@ const SHARED_SCRIPT = `
             '<div style="font-size:11px;color:#d98208;font-weight:700;margin-bottom:10px;">&#11088; ' +
             escapeText(o.rating) +
             ' &bull; ' +
+<<<<<<< HEAD
+            escapeText(o.distance) +
+            ' &bull; ' +
+            escapeText(o.price) +
+            '</div>' +
+=======
             escapeText(distanceLabel(o)) +
             ' &bull; ' +
             escapeText(o.price) +
             '</div>' +
             note +
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
             '<button data-order="' +
             escapeText(o.id) +
             '" style="background:#0878f9;color:#ffffff;border:none;border-radius:9px;padding:8px 14px;font-size:11px;font-weight:700;">Pesan</button>' +
@@ -300,10 +378,120 @@ const SHARED_SCRIPT = `
           );
         }
 
+<<<<<<< HEAD
+        function escapeText(value) {
+          return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        }
+
+        // Delegasi klik untuk tombol "Pesan" di dalam InfoWindow / Popup
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         document.addEventListener('click', function (event) {
           var target = event.target;
           if (target && target.getAttribute && target.getAttribute('data-order')) {
             var id = target.getAttribute('data-order');
+<<<<<<< HEAD
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(
+                JSON.stringify({ type: 'order', id: id })
+              );
+            }
+          }
+        });
+`;
+}
+
+/**
+ * Membangun dokumen HTML peta di dalam WebView.
+ *
+ * - provider "google": Google Maps JavaScript API (butuh API key valid).
+ * - provider "osm"   : Leaflet + OpenStreetMap (TIDAK butuh API key).
+ *
+ * Dipakai WebView (bukan react-native-maps) karena:
+ *  - Google Maps SDK native tidak bisa dipakai di Expo Go (API key Expo Go
+ *    sudah tidak valid -> peta tampil gelap/hitam).
+ *  - WebView hanya butuh internet, sehingga peta selalu tampil di Expo Go,
+ *    emulator, maupun build production.
+ */
+export function buildMapHtml(options: {
+  apiKey: string;
+  outlets: MappableOutlet[];
+  center?: Coordinate;
+  userLocation?: Coordinate | null;
+  provider?: MapProvider;
+}): string {
+  const {
+    apiKey,
+    outlets,
+    center = {
+      latitude: DEFAULT_MAP_REGION.latitude,
+      longitude: DEFAULT_MAP_REGION.longitude,
+    },
+    userLocation = null,
+    provider = "google",
+  } = options;
+
+  const payload = {
+    outlets: outlets.map((o) => ({
+      id: o.id,
+      name: o.name,
+      address: o.address,
+      distance: o.distance,
+      rating: o.rating,
+      price: o.price,
+      photo: o.photo ?? "",
+      lat: o.latitude,
+      lng: o.longitude,
+    })),
+    center: { lat: center.latitude, lng: center.longitude },
+    userLocation: userLocation
+      ? { lat: userLocation.latitude, lng: userLocation.longitude }
+      : null,
+  };
+
+  // Escape karakter '<' agar payload tidak memutus tag <script>
+  const data = JSON.stringify(payload).replace(/</g, "\\u003c");
+
+  const head =
+    provider === "google"
+      ? `
+    <script src="https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+        apiKey
+      )}&libraries=geometry"></script>`
+      : `
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>.leaflet-container { font: inherit; }</style>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>`;
+
+  const initScript =
+    provider === "google"
+      ? `
+        var map = null;
+        var markers = [];
+        var outletsById = {};
+        var userMarker = null;
+
+        function addUserMarker(position) {
+          if (!map) return;
+          if (userMarker) { userMarker.setPosition(position); return; }
+          userMarker = new google.maps.Marker({
+            map: map,
+            position: position,
+            title: 'Lokasi Anda',
+            zIndex: 999,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 7,
+              fillColor: '#0878f9',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 3
+            }
+          });
+=======
             postToApp({ type: 'order', id: id });
           }
         });
@@ -377,6 +565,7 @@ const GOOGLE_SCRIPT = `
           if (!map || !userPosition) return;
           map.panTo(userPosition);
           if (zoom) { map.setZoom(zoom); }
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         }
 
         function init() {
@@ -419,12 +608,18 @@ const GOOGLE_SCRIPT = `
 
             var info = new google.maps.InfoWindow({ content: infoContent(o) });
             marker.addListener('click', function () {
+<<<<<<< HEAD
+              info.open({ anchor: marker, map: map });
+            });
+
+=======
               info.setContent(infoContent(o));
               info.open({ anchor: marker, map: map });
             });
 
             infoWindows[o.id] = { info: info, outlet: o };
 
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
             markers.push(marker);
             bounds.extend(position);
           });
@@ -437,6 +632,12 @@ const GOOGLE_SCRIPT = `
             map.setView(DATA.center, 14);
           }
 
+<<<<<<< HEAD
+          if (DATA.userLocation) { addUserMarker(DATA.userLocation); }
+        }
+`
+      : `
+=======
           google.maps.event.addListener(map, 'click', function (event) {
             if (!pickMode) return;
             var lat = event.latLng.lat();
@@ -454,10 +655,24 @@ const GOOGLE_SCRIPT = `
 `;
 
 const OSM_SCRIPT = `
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         var map = null;
         var markers = [];
         var outletsById = {};
         var userMarker = null;
+<<<<<<< HEAD
+
+        function addUserMarker(position) {
+          if (!map) return;
+          if (userMarker) { userMarker.setLatLng(position); return; }
+          userMarker = L.circleMarker([position.lat, position.lng], {
+            radius: 7,
+            color: '#ffffff',
+            weight: 3,
+            fillColor: '#0878f9',
+            fillOpacity: 1
+          }).addTo(map);
+=======
         var userCircle = null;
         var pickMode = false;
         var userPosition = DATA.userLocation;
@@ -508,6 +723,7 @@ const OSM_SCRIPT = `
           if (!map || !userPosition) return;
           map.panTo([userPosition.lat, userPosition.lng]);
           if (zoom) { map.setZoom(zoom); }
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         }
 
         function init() {
@@ -525,7 +741,10 @@ const OSM_SCRIPT = `
             outletsById[o.id] = o;
             var marker = L.marker([o.lat, o.lng], {
               title: o.name,
+<<<<<<< HEAD
+=======
               bubblingMouseEvents: false,
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
               icon: L.divIcon({
                 className: 'mylauncher',
                 html: '<div style="width:30px;height:30px;border-radius:15px;background:#0878f9;border:3px solid #ffffff;color:#ffffff;font:700 13px -apple-system,Roboto,sans-serif;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(9,35,77,.35);">' +
@@ -536,7 +755,11 @@ const OSM_SCRIPT = `
               })
             }).addTo(map);
 
+<<<<<<< HEAD
+            marker.bindPopup(infoContent(o), { closeButton: false, offset: [0, -6] });
+=======
             marker.bindPopup(function () { return infoContent(o); }, { closeButton: false, offset: [0, -6] });
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
             markers.push(marker);
             group.push([o.lat, o.lng]);
           });
@@ -547,6 +770,12 @@ const OSM_SCRIPT = `
             map.setView(group[0], 15);
           }
 
+<<<<<<< HEAD
+          if (DATA.userLocation) { addUserMarker(DATA.userLocation); }
+        }
+`;
+
+=======
           map.on('click', function (event) {
             if (!pickMode) return;
             var lat = event.latlng.lat;
@@ -618,6 +847,7 @@ export function buildMapHtml(options: {
 
   const providerScript = provider === "google" ? GOOGLE_SCRIPT : OSM_SCRIPT;
 
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
   const tileSelector =
     provider === "google" ? ".gm-style img" : ".leaflet-tile-loaded";
 
@@ -639,6 +869,29 @@ export function buildMapHtml(options: {
     </script>${head}
     <script>
       (function () {
+<<<<<<< HEAD
+        ${buildInfoContentScript()}
+        ${initScript}
+
+        // Pesan dari aplikasi (mis. lokasi pengguna baru diketahui)
+        window.addEventListener('message', function (event) {
+          try {
+            var message = JSON.parse(event.data);
+            if (message.type === 'userLocation' && map) {
+              addUserMarker({ lat: message.lat, lng: message.lng });
+              map.panTo({ lat: message.lat, lng: message.lng });
+            }
+            if (message.type === 'focus' && map && outletsById[message.id]) {
+              var o = outletsById[message.id];
+              if (map.panTo) { map.panTo({ lat: o.lat, lng: o.lng }); map.setZoom(16); }
+            }
+          } catch (err) {
+            // abaikan pesan yang tidak valid
+          }
+        });
+
+        // Deteksi tile gagal dimuat (API key salah / tidak ada internet)
+=======
         ${SHARED_SCRIPT}
         ${providerScript}
 
@@ -672,6 +925,7 @@ export function buildMapHtml(options: {
           }
         });
 
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         setTimeout(function () {
           var tiles = document.querySelectorAll('${tileSelector}');
           var loaded = 0;
@@ -680,7 +934,15 @@ export function buildMapHtml(options: {
             if (img.tagName === 'IMG' && img.naturalWidth > 0) { loaded++; }
             else if (img.tagName !== 'IMG') { loaded++; }
           }
+<<<<<<< HEAD
+          if (loaded === 0 && window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify({ type: 'tilesFailed' })
+            );
+          }
+=======
           if (loaded === 0) { postToApp({ type: 'tilesFailed' }); }
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
         }, 6000);
 
         if (typeof google !== 'undefined' && google.maps) {
