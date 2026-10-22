@@ -24,6 +24,7 @@ import {
   confirmDigitalPaymentSimulation,
   getLiveOutlets,
 } from "../services/supabase";
+import { getProfileAddresses } from "../services/profileAddressService";
 
 const CATEGORY_LABEL: Record<ServiceCategory, string> = {
   kiloan: "Cuci Kiloan",
@@ -78,6 +79,7 @@ export function OrderModal({
   const [loadingOutlets, setLoadingOutlets] = useState(false);
   const [clothingNotes, setClothingNotes] = useState("");
   const [pickupTimeSlot, setPickupTimeSlot] = useState("Pagi (08:00 - 11:00)");
+  const [pickupAddress, setPickupAddress] = useState("");
 
   useEffect(() => {
     if (visible) {
@@ -88,8 +90,21 @@ export function OrderModal({
       setShowOutletPicker(false);
       setClothingNotes("");
       setPickupTimeSlot("Pagi (08:00 - 11:00)");
+
+      if (customerId) {
+        getProfileAddresses(customerId)
+          .then((addrs) => {
+            const def = addrs.find((a) => a.is_default) || addrs[0];
+            if (def) {
+              setPickupAddress(
+                def.label ? `${def.address_text} (${def.label})` : def.address_text
+              );
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [visible, outlet]);
+  }, [visible, outlet, customerId]);
 
   useEffect(() => {
     if (currentOutlet && visible) {
@@ -160,6 +175,17 @@ export function OrderModal({
     }
 
     setSubmitting(true);
+    const addressPrefix =
+      handoverMethod === "pickup_delivery" && pickupAddress.trim()
+        ? `[Alamat: ${pickupAddress.trim()}] `
+        : "";
+    const pickupSlotPrefix =
+      handoverMethod === "pickup_delivery"
+        ? `[Jemput: ${pickupTimeSlot}] `
+        : "";
+    const formattedNotes =
+      (addressPrefix + pickupSlotPrefix + clothingNotes).trim() || undefined;
+
     const { order, error } = await createCustomerOrder({
       customerId,
       outletId: currentOutlet.id,
@@ -168,7 +194,7 @@ export function OrderModal({
       quantity,
       handoverMethod,
       paymentMethod,
-      notes: (handoverMethod === "pickup_delivery" ? `[Jemput: ${pickupTimeSlot}] ${clothingNotes}` : clothingNotes).trim() || undefined,
+      notes: formattedNotes,
     });
     setSubmitting(false);
 
@@ -559,10 +585,26 @@ export function OrderModal({
               <Text style={styles.sectionTitle}>5. CATATAN & JADWAL JEMPUT</Text>
 
               {handoverMethod === "pickup_delivery" && (
-                <View style={styles.pickupTimeContainer}>
-                  <Text style={styles.inputLabel}>
-                    Pilihan Waktu Penjemputan (Pickup):
-                  </Text>
+                <>
+                  <View style={styles.addressInputContainer}>
+                    <Text style={styles.inputLabel}>
+                      📍 Alamat Penjemputan / Antar:
+                    </Text>
+                    <TextInput
+                      style={styles.addressInput}
+                      placeholder="Contoh: Jl. Sukajadi No. 45, RT 02/05 (Rumah / Kos)"
+                      placeholderTextColor="#94a3b8"
+                      value={pickupAddress}
+                      onChangeText={setPickupAddress}
+                      multiline
+                      numberOfLines={2}
+                    />
+                  </View>
+
+                  <View style={styles.pickupTimeContainer}>
+                    <Text style={styles.inputLabel}>
+                      Pilihan Waktu Penjemputan (Pickup):
+                    </Text>
                   <View style={styles.timeSlotRow}>
                     {[
                       "Pagi (08:00 - 11:00)",
@@ -593,7 +635,8 @@ export function OrderModal({
                     })}
                   </View>
                 </View>
-              )}
+              </>
+            )}
 
               <View style={styles.notesContainer}>
                 <Text style={styles.inputLabel}>
@@ -1181,6 +1224,20 @@ const styles = StyleSheet.create({
   },
   pickupTimeContainer: {
     marginBottom: 14,
+  },
+  addressInputContainer: {
+    marginBottom: 14,
+  },
+  addressInput: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    padding: 10,
+    fontSize: 13,
+    color: "#0f172a",
+    textAlignVertical: "top",
+    minHeight: 52,
   },
   inputLabel: {
     fontSize: 12,

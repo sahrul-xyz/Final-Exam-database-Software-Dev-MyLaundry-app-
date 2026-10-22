@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
-CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Authenticated users can view profiles" ON public.profiles;
+CREATE POLICY "Authenticated users can view profiles" ON public.profiles FOR SELECT TO authenticated USING (true);
 
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
 CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
@@ -54,7 +55,9 @@ CREATE TABLE IF NOT EXISTS public.addresses (
 ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can manage their own addresses" ON public.addresses;
+DROP POLICY IF EXISTS "Allow authenticated read addresses" ON public.addresses;
 CREATE POLICY "Users can manage their own addresses" ON public.addresses FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Allow authenticated read addresses" ON public.addresses FOR SELECT TO authenticated USING (true);
 
 -- -------------------------------------------------------
 -- TABEL 3: LAUNDRY OUTLETS
