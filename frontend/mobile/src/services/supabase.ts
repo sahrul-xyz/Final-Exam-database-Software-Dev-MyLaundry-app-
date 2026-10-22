@@ -442,7 +442,28 @@ export async function fetchCustomerOrders(
       .eq("customer_id", customerId)
       .order("created_at", { ascending: false });
 
-    if (error || !data) return [];
+    if (error || !data) {
+      if (error) console.error("Gagal memuat pesanan pelanggan:", error.message);
+      return [];
+    }
+
+    // Ambil ulasan secara terpisah agar riwayat pesanan tetap dapat tampil
+    // walaupun tabel/relasi reviews belum tersedia pada database yang dipakai.
+    const reviewedOrderIds = new Set<string>();
+    if (data.length > 0) {
+      const { data: reviewRows, error: reviewError } = await supabase
+        .from("reviews")
+        .select("order_id")
+        .in("order_id", data.map((order: any) => order.id));
+
+      if (reviewError) {
+        console.warn("Status ulasan belum dapat diperiksa:", reviewError.message);
+      } else {
+        (reviewRows || []).forEach((review: { order_id: string }) => {
+          reviewedOrderIds.add(review.order_id);
+        });
+      }
+    }
 
     return data.map((o: any) => ({
       id: o.id,
@@ -457,6 +478,7 @@ export async function fetchCustomerOrders(
       paymentStatus: o.payment_status,
       serviceDate: o.service_date,
       createdAt: o.created_at,
+      hasReview: reviewedOrderIds.has(o.id),
       items: (o.order_items || []).map((it: any) => ({
         id: it.id,
         serviceName: it.service_name_snapshot,
@@ -481,16 +503,81 @@ export async function submitCustomerReview(params: {
   comment?: string;
 }): Promise<{ success: boolean; error: string | null }> {
   try {
+    const comment = params.comment?.trim() || "";
+    if (!Number.isInteger(params.rating) || params.rating < 1 || params.rating > 5) {
+      return { success: false, error: "Pilih rating antara 1 sampai 5 bintang." };
+    }
+    if (!comment) {
+      return { success: false, error: "Tulis komentar ulasan terlebih dahulu." };
+    }
+
+    // Pastikan request benar-benar berasal dari sesi pelanggan yang sedang login.
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authenticatedUser = authData?.user;
+    if (authError || !authenticatedUser) {
+      return {
+        success: false,
+        error: "Sesi login tidak ditemukan. Silakan masuk kembali sebelum mengirim ulasan.",
+      };
+    }
+    if (authenticatedUser.id !== params.customerId) {
+      return {
+        success: false,
+        error: "Akun login tidak cocok dengan pemilik pesanan. Silakan masuk kembali.",
+      };
+    }
+
+    // Validasi ulang ke database: pesanan harus milik pengguna dan sudah selesai.
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, customer_id, outlet_id, status")
+      .eq("id", params.orderId)
+      .eq("customer_id", authenticatedUser.id)
+      .maybeSingle();
+
+    if (orderError) {
+      console.error("Gagal memeriksa pesanan untuk ulasan:", orderError.message);
+      return { success: false, error: "Pesanan tidak dapat diverifikasi. Coba muat ulang aplikasi." };
+    }
+    if (!order) {
+      return { success: false, error: "Pesanan tidak ditemukan atau bukan milik akun ini." };
+    }
+    if (order.status !== "completed") {
+      return { success: false, error: "Ulasan hanya dapat dikirim setelah pesanan selesai." };
+    }
+
     const { error } = await supabase.from("reviews").insert({
-      order_id: params.orderId,
-      customer_id: params.customerId,
-      outlet_id: params.outletId,
+      order_id: order.id,
+      customer_id: authenticatedUser.id,
+      outlet_id: order.outlet_id,
       rating: params.rating,
-      comment: params.comment || null,
+      comment,
     });
-    if (error) return { success: false, error: error.message };
+
+    if (error) {
+      if (error.code === "23505") {
+        return { success: false, error: "Pesanan ini sudah pernah diberi ulasan." };
+      }
+      if (error.code === "42501") {
+        return {
+          success: false,
+          error: "Database menolak ulasan. Pastikan sesi login aktif dan jalankan migrasi aturan ulasan di Supabase.",
+        };
+      }
+      if (error.code === "42P01" || error.message.toLowerCase().includes("reviews")) {
+        console.error("Tabel reviews bermasalah:", error.message);
+        return {
+          success: false,
+          error: "Tabel ulasan belum tersedia atau belum sesuai. Jalankan migrasi ulasan di Supabase.",
+        };
+      }
+      console.error("Gagal menyimpan ulasan:", error.code, error.message);
+      return { success: false, error: error.message || "Gagal mengirim ulasan." };
+    }
+
     return { success: true, error: null };
   } catch (err: any) {
+    console.error("Kesalahan saat mengirim ulasan:", err);
     return { success: false, error: err.message || "Gagal mengirim ulasan" };
   }
 }
@@ -649,6 +736,13 @@ export async function signUpCustomer(params: {
       return { user: null, error: authError.message };
     }
     if (!authData.user) return { user: null, error: "Gagal membuat akun." };
+    if (!authData.session) {
+      return {
+        user: null,
+        error:
+          "Akun berhasil dibuat, tetapi sesi belum aktif. Jika konfirmasi email diaktifkan, buka tautan konfirmasi di email lalu masuk kembali.",
+      };
+    }
 
     const userId = authData.user.id;
 
