@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   View,
@@ -11,7 +11,11 @@ import {
   Platform,
 } from "react-native";
 import { UserProfile } from "../types";
-import { signInCustomer, signUpCustomer } from "../services/supabase";
+import {
+  checkSupabaseConnection,
+  signInCustomer,
+  signUpCustomer,
+} from "../services/supabase";
 import { BrandMark } from "../components/Brand";
 
 export function AuthScreen({
@@ -26,6 +30,11 @@ export function AuthScreen({
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [demoMode, setDemoMode] = useState(false);
+
+  useEffect(() => {
+    checkSupabaseConnection().then((reachable) => setDemoMode(!reachable));
+  }, []);
 
   const handleSubmit = async () => {
     setErrorMsg("");
@@ -127,6 +136,16 @@ export function AuthScreen({
         {errorMsg !== "" && (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        )}
+
+        {demoMode && (
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeText}>
+              Mode demo aktif: Supabase belum terhubung (API key belum diisi atau
+              tidak valid). Daftar outlet & peta memakai data contoh, login tetap
+              bisa dilakukan untuk demo.
+            </Text>
           </View>
         )}
 
@@ -300,6 +319,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     textAlign: "center",
+  },
+  noticeBox: {
+    backgroundColor: "#eaf4ff",
+    borderWidth: 1,
+    borderColor: "#cfe6fb",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  noticeText: {
+    color: "#0b4f8f",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
   },
   formCard: {
     backgroundColor: "#ffffff",

@@ -22,6 +22,85 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+export const isSupabaseConfigured =
+  Boolean(supabaseUrl) &&
+  Boolean(supabaseAnonKey) &&
+  !supabaseAnonKey.includes("placeholder");
+
+const DEMO_USER_ID = "00000000-0000-4000-8000-000000000001";
+
+let supabaseReachable: boolean | null = null;
+
+export function isDemoMode(): boolean {
+  return supabaseReachable === false;
+}
+
+function isInvalidApiKeyError(message?: string | null): boolean {
+  return String(message || "")
+    .toLowerCase()
+    .includes("invalid api key");
+}
+
+export async function checkSupabaseConnection(): Promise<boolean> {
+  if (!isSupabaseConfigured) {
+    supabaseReachable = false;
+    return false;
+  }
+
+  if (supabaseReachable !== null) return supabaseReachable;
+
+  try {
+    const { error } = await supabase
+      .from("laundry_outlets")
+      .select("id")
+      .limit(1);
+
+    if (error) {
+      if (isInvalidApiKeyError(error.message)) {
+        supabaseReachable = false;
+        return false;
+      }
+      supabaseReachable = true;
+      return true;
+    }
+
+    supabaseReachable = true;
+    return true;
+  } catch {
+    supabaseReachable = null;
+    return false;
+  }
+}
+
+function buildDemoUser(
+  email: string,
+  fullName?: string,
+  phone?: string
+): UserProfile {
+  const nameFromEmail =
+    email
+      .split("@")[0]
+      .replace(/[._-]+/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim() || "Pelanggan MyLaundry";
+
+  return {
+    id: DEMO_USER_ID,
+    email,
+    fullName: fullName || nameFromEmail,
+    phone: phone || "0812-0000-0000",
+    role: "customer",
+  };
+}
+
+function validateDemoCredentials(email: string, password: string): string | null {
+  if (!email || !email.includes("@")) return "Format email tidak valid.";
+  if (!password || password.length < 6) {
+    return "Kata sandi minimal 6 karakter.";
+  }
+  return null;
+}
+
 export const fallbackOutlets: Outlet[] = [
   {
     id: "a0000000-0000-0000-0000-000000000001",
@@ -620,6 +699,17 @@ export async function signUpCustomer(params: {
   fullName: string;
   phone?: string;
 }): Promise<{ user: UserProfile | null; error: string | null }> {
+  const reachable = await checkSupabaseConnection();
+
+  if (!reachable) {
+    const invalid = validateDemoCredentials(params.email, params.password);
+    if (invalid) return { user: null, error: invalid };
+    return {
+      user: buildDemoUser(params.email, params.fullName, params.phone),
+      error: null,
+    };
+  }
+
   try {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: params.email,
@@ -633,7 +723,18 @@ export async function signUpCustomer(params: {
       },
     });
 
-    if (authError) return { user: null, error: authError.message };
+    if (authError) {
+      if (isInvalidApiKeyError(authError.message)) {
+        supabaseReachable = false;
+        const invalid = validateDemoCredentials(params.email, params.password);
+        if (invalid) return { user: null, error: invalid };
+        return {
+          user: buildDemoUser(params.email, params.fullName, params.phone),
+          error: null,
+        };
+      }
+      return { user: null, error: authError.message };
+    }
     if (!authData.user) return { user: null, error: "Gagal membuat akun." };
     if (!authData.session) {
       return {
@@ -672,13 +773,29 @@ export async function signInCustomer(params: {
   email: string;
   password: string;
 }): Promise<{ user: UserProfile | null; error: string | null }> {
+  const reachable = await checkSupabaseConnection();
+
+  if (!reachable) {
+    const invalid = validateDemoCredentials(params.email, params.password);
+    if (invalid) return { user: null, error: invalid };
+    return { user: buildDemoUser(params.email), error: null };
+  }
+
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
       email: params.email,
       password: params.password,
     });
 
-    if (error) return { user: null, error: error.message };
+    if (error) {
+      if (isInvalidApiKeyError(error.message)) {
+        supabaseReachable = false;
+        const invalid = validateDemoCredentials(params.email, params.password);
+        if (invalid) return { user: null, error: invalid };
+        return { user: buildDemoUser(params.email), error: null };
+      }
+      return { user: null, error: error.message };
+    }
     if (!data.user) return { user: null, error: "Pengguna tidak ditemukan." };
 
     const { data: profile } = await supabase
@@ -722,6 +839,9 @@ export async function signOutCustomer(): Promise<void> {
 }
 
 export async function getCurrentCustomer(): Promise<UserProfile | null> {
+  const reachable = await checkSupabaseConnection();
+  if (!reachable) return null;
+
   try {
     const {
       data: { user },

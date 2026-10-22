@@ -15,7 +15,10 @@ import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { NotificationHistoryScreen } from "./src/screens/NotificationHistoryScreen";
 import { OrderModal } from "./src/components/OrderModal";
+<<<<<<< HEAD
 
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
 import { MapScreen } from "./src/screens/MapScreen";
 import { OrderNotifBanner } from "./src/components/OrderNotifBanner";
 import { Outlet, TabName, UserProfile, ServiceCategory } from "./src/types";
@@ -96,16 +99,16 @@ export default function App() {
                 onOpenNotifications={() => setShowNotifications(true)}
               />
             )}
+
             {activeTab === "pesanan" && (
               <OrdersScreen customerId={currentUser.id} />
             )}
+
             {activeTab === "profil" && (
               <ProfileScreen
-                user={{
-                  fullName: currentUser.fullName,
-                  email: currentUser.email,
-                }}
+                user={currentUser}
                 onLogout={handleLogout}
+                onSaved={setCurrentUser}
               />
             )}
           </>
@@ -204,8 +207,11 @@ export default function App() {
         }}
       />
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 391b455909d89a0f4b4348e73ee4c978d6f4b295
       <Modal
         visible={mapVisible}
         animationType="fade"
