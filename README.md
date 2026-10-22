@@ -139,13 +139,3 @@ Detailed technical proofs are documented in **[`docs/DATABASE_IK301_EVIDENCE.md`
 
 ---
 
-## 🤖 AI Usage Statement
-
-In accordance with Section 7 of the Ujian Akhir Startup Pitch guidelines:
-
-- **AI Tools Used:** Google Antigravity / Gemini 3.8 Flash.
-- **Purpose and Scope:**
-  - Automated test scaffolding and test assertion design (`tests/orderBusinessRules.test.ts`).
-  - Query plan benchmarking and indexing structure review for PostgreSQL.
-  - Refactoring and sanitization of codebase (removing dead code and stabilizing Realtime WebSocket listeners).
-- **Academic Integrity Statement:** All application architectures, data models, business rules, and technical implementations have been reviewed, verified, and are fully understood by each team member for defense during the live presentation.
