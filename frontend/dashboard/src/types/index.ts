@@ -53,12 +53,27 @@ export interface OrderItem {
   line_total: number;
 }
 
+export interface OrderReview {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  created_at: string;
+}
+
+export interface OrderComplaint {
+  id: string;
+  reason: string;
+  status: "open" | "resolved";
+  created_at: string;
+}
+
 export interface PartnerOrder {
   id: string;
   order_number: string;
   customer_id: string;
   customer_name: string;
   customer_phone?: string;
+  customer_address?: string;
   outlet_id: string;
   outlet_name?: string;
   service_date: string;
@@ -71,5 +86,7 @@ export interface PartnerOrder {
   created_at: string;
   notes?: string | null;
   items: OrderItem[];
+  review?: OrderReview | null;
+  complaint?: OrderComplaint | null;
 }
 

@@ -25,6 +25,8 @@ import {
   deletePartnerService,
   PartnerServiceData,
   uploadOutletPhoto,
+  fetchPartnerComplaints,
+  resolvePartnerComplaint,
 } from "../../services/supabase";
 
 export function PartnerDashboard({
@@ -553,8 +555,19 @@ export function PartnerDashboard({
               <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)", paddingBottom: "8px" }}>
                 <span style={{ color: "var(--muted)" }}>Pelanggan</span>
                 <div style={{ textAlign: "right" }}>
-                  <strong>{selectedOrder.customer_name}</strong>
-                  <div style={{ color: "var(--muted)", fontSize: "11px" }}>{selectedOrder.customer_phone || "-"}</div>
+                  <strong style={{ fontSize: "13px" }}>{selectedOrder.customer_name}</strong>
+                  <div style={{ color: "var(--muted)", fontSize: "11px" }}>
+                    📞 {selectedOrder.customer_phone || "-"}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid var(--line)", paddingBottom: "8px" }}>
+                <span style={{ color: "var(--muted)" }}>Alamat Pelanggan</span>
+                <div style={{ textAlign: "right", maxWidth: "60%" }}>
+                  <strong style={{ fontSize: "12px", color: "#1e293b", wordBreak: "break-word" }}>
+                    📍 {selectedOrder.customer_address || (selectedOrder.handover_method === "drop_off" ? "Drop-off langsung ke outlet" : "Alamat belum diatur")}
+                  </strong>
                 </div>
               </div>
 
@@ -580,6 +593,54 @@ export function PartnerDashboard({
                   </div>
                 </div>
               )}
+
+              {/* Komplain dari Pelanggan (Jika ada) */}
+              {selectedOrder.complaint && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", padding: "12px", borderRadius: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <strong style={{ color: "#b91c1c", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                      ⚠️ Komplain Pelanggan:
+                    </strong>
+                    <Badge tone={selectedOrder.complaint.status === "open" ? "amber" : "green"}>
+                      {selectedOrder.complaint.status === "open" ? "Perlu Solusi" : "Terselesaikan"}
+                    </Badge>
+                  </div>
+                  <div style={{ color: "#7f1d1d", fontSize: "12px", background: "rgba(255,255,255,0.7)", padding: "8px", borderRadius: "6px" }}>
+                    "{selectedOrder.complaint.reason}"
+                  </div>
+                  <div style={{ fontSize: "10px", color: "#991b1b", marginTop: "6px" }}>
+                    Diajukan {formatRelativeTime(selectedOrder.complaint.created_at)}
+                  </div>
+                </div>
+              )}
+
+              {/* Ulasan dari Pelanggan */}
+              {selectedOrder.review ? (
+                <div style={{ background: "#fefce8", border: "1px solid #fef08a", padding: "12px", borderRadius: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <strong style={{ color: "#854d0e", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                      ⭐ Ulasan dari Pelanggan:
+                    </strong>
+                    <span style={{ fontWeight: 700, color: "#a16207", fontSize: "12px" }}>
+                      {"★".repeat(selectedOrder.review.rating)}{"☆".repeat(Math.max(0, 5 - selectedOrder.review.rating))} ({selectedOrder.review.rating}/5)
+                    </span>
+                  </div>
+                  {selectedOrder.review.comment ? (
+                    <div style={{ color: "#451a03", fontStyle: "italic", fontSize: "12px", background: "rgba(255,255,255,0.7)", padding: "6px 8px", borderRadius: "6px", margin: "4px 0" }}>
+                      "{selectedOrder.review.comment}"
+                    </div>
+                  ) : (
+                    <small style={{ color: "#a16207", fontSize: "11px" }}>Pelanggan tidak menyertakan komentar tertulis.</small>
+                  )}
+                  <div style={{ fontSize: "10px", color: "#a16207", textAlign: "right", marginTop: "4px" }}>
+                    Diberikan {formatRelativeTime(selectedOrder.review.created_at)}
+                  </div>
+                </div>
+              ) : selectedOrder.status === "completed" ? (
+                <div style={{ background: "#f8fafc", border: "1px dashed var(--line)", padding: "10px", borderRadius: "8px", textAlign: "center", color: "var(--muted)", fontSize: "11px" }}>
+                  ⏳ Pelanggan belum mengirimkan ulasan untuk pesanan ini.
+                </div>
+              ) : null}
 
               <div style={{ background: "#f8fafc", padding: "10px", borderRadius: "8px" }}>
                 <strong style={{ display: "block", marginBottom: "6px" }}>Rincian Layanan:</strong>
@@ -879,10 +940,26 @@ function OrderTable({
                         .join("")}
                     </span>
                     <div>
-                      <div>{order.customer_name}</div>
-                      <small style={{ fontSize: "8px", color: "var(--muted)" }}>
-                        {order.customer_phone || "-"}
+                      <div style={{ fontWeight: 600 }}>{order.customer_name}</div>
+                      <small style={{ fontSize: "10px", color: "var(--muted)", display: "block" }}>
+                        {order.customer_phone && order.customer_phone !== "-" ? `📞 ${order.customer_phone}` : ""}
                       </small>
+                      {order.customer_address && (
+                        <small
+                          title={order.customer_address}
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--blue-700)",
+                            display: "block",
+                            maxWidth: "150px",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          📍 {order.customer_address}
+                        </small>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -894,6 +971,52 @@ function OrderTable({
                   <Badge tone={getStatusTone(order.status)}>
                     {getStatusLabel(order.status)}
                   </Badge>
+                  {order.review && (
+                    <div style={{ marginTop: "4px" }}>
+                      <span
+                        title={`Ulasan: "${order.review.comment || 'Tanpa teks'}"`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "2px",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "#854d0e",
+                          background: "#fef9c3",
+                          border: "1px solid #fef08a",
+                          borderRadius: "4px",
+                          padding: "1px 5px",
+                        }}
+                      >
+                        ⭐ {order.review.rating}/5
+                      </span>
+                    </div>
+                  )}
+                  {order.complaint && (
+                    <div style={{ marginTop: "4px" }}>
+                      <span
+                        title={`Komplain: "${order.complaint.reason}"`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "2px",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: order.complaint.status === "open" ? "#b91c1c" : "#15803d",
+                          background: order.complaint.status === "open" ? "#fef2f2" : "#f0fdf4",
+                          border: `1px solid ${
+                            order.complaint.status === "open" ? "#fecaca" : "#bbf7d0"
+                          }`,
+                          borderRadius: "4px",
+                          padding: "1px 5px",
+                        }}
+                      >
+                        {order.complaint.status === "open"
+                          ? "⚠️ Komplain Masuk"
+                          : "✓ Komplain Selesai"}
+                      </span>
+                    </div>
+                  )}
                 </td>
 
                 <td>
@@ -2032,6 +2155,19 @@ function FinancialsManagement({
   >([]);
   const [processingPayout, setProcessingPayout] = useState(false);
 
+  const loadComplaints = useCallback(async () => {
+    try {
+      const data = await fetchPartnerComplaints();
+      setComplaintList(data);
+    } catch (e) {
+      console.warn("loadComplaints err:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadComplaints();
+  }, [loadComplaints]);
+
   // Perhitungan Keuangan Dinamis berdasarkan pesanan selesai aktual
   const completedOrders = orders.filter((o) => o.status === "completed");
   const totalGross = completedOrders.reduce(
@@ -2084,11 +2220,17 @@ function FinancialsManagement({
     }, 600);
   };
 
-  const handleResolveComplaint = (id: string) => {
-    setComplaintList(
-      complaintList.map((c) => (c.id === id ? { ...c, status: "resolved" } : c))
-    );
-    notify("Komplain berhasil ditandai selesai & solusi telah dikirimkan ke pelanggan!");
+  const handleResolveComplaint = async (id: string) => {
+    notify("Memperbarui status komplain...");
+    const ok = await resolvePartnerComplaint(id);
+    if (ok) {
+      setComplaintList((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: "resolved" } : c))
+      );
+      notify("Komplain berhasil ditandai selesai & solusi telah dikirimkan ke pelanggan!");
+    } else {
+      notify("Gagal memperbarui status komplain.");
+    }
   };
 
   return (
@@ -2313,7 +2455,22 @@ function FinancialsManagement({
                 </tr>
               </thead>
               <tbody>
-                {complaintList.map((c) => (
+                {complaintList.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "var(--muted)",
+                        fontSize: "13px",
+                      }}
+                    >
+                      🛡️ Tidak ada komplain pelanggan saat ini. Pelanggan dapat mengajukan komplain maksimal 1 jam setelah pesanan selesai.
+                    </td>
+                  </tr>
+                ) : (
+                  complaintList.map((c) => (
                   <tr key={c.id}>
                     <td>
                       <strong style={{ color: "var(--blue-700)" }}>{c.orderNumber}</strong>
@@ -2351,7 +2508,7 @@ function FinancialsManagement({
                       )}
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
