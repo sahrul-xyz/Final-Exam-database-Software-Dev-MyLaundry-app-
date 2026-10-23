@@ -18,7 +18,14 @@ import { OrderModal } from "./src/components/OrderModal";
 import { MapScreen } from "./src/screens/MapScreen";
 import { OrderNotifBanner } from "./src/components/OrderNotifBanner";
 import { Outlet, TabName, UserProfile, ServiceCategory } from "./src/types";
-import { getCurrentCustomer, signOutCustomer } from "./src/services/supabase";
+import {
+  getCurrentCustomer,
+  signOutCustomer,
+  fetchCustomerOrders,
+} from "./src/services/supabase";
+
+// Status yang dianggap selesai (sama dengan tab Riwayat di OrdersScreen)
+const FINISHED_STATUSES = ["completed", "cancelled", "rejected", "expired"];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>("beranda");
@@ -31,6 +38,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [hasActiveOrders, setHasActiveOrders] = useState(false);
 
   const goTab = (tab: TabName) => {
     setShowNotifications(false);
@@ -45,6 +53,30 @@ export default function App() {
       setLoadingSession(false);
     });
   }, []);
+
+  // Titik merah tab Pesanan: nyala kalau ada pesanan yang belum selesai.
+  // Dicek ulang tiap 15 detik (tanpa realtime, jadi nggak bentrok dengan layar lain).
+  useEffect(() => {
+    if (!currentUser) {
+      setHasActiveOrders(false);
+      return;
+    }
+    let cancelled = false;
+    const check = async () => {
+      const orders = await fetchCustomerOrders(currentUser.id);
+      if (!cancelled) {
+        setHasActiveOrders(
+          orders.some((o) => !FINISHED_STATUSES.includes(o.status))
+        );
+      }
+    };
+    check();
+    const timer = setInterval(check, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [currentUser?.id]);
 
   const handleLogout = async () => {
     await signOutCustomer();
@@ -150,7 +182,7 @@ export default function App() {
             >
               📋
             </Text>
-            <View style={styles.navDot} />
+            {hasActiveOrders && <View style={styles.navDot} />}
           </View>
           <Text
             style={[

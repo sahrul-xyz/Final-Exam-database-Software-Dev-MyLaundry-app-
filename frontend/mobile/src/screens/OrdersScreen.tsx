@@ -186,8 +186,10 @@ export function OrdersScreen({
       o.status === "expired"
   );
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  // Label status berwarna. Menerima seluruh pesanan supaya bisa cek
+  // metode & status pembayaran (buat teks "dana dikembalikan").
+  const getStatusBadge = (order: CustomerOrder) => {
+    switch (order.status) {
       case "pending_payment":
         return { label: "Menunggu Bayar", bg: "#fef3c7", color: "#d97706" };
       case "pending_partner":
@@ -201,13 +203,25 @@ export function OrdersScreen({
       case "ready_for_pickup":
         return { label: "Siap Diambil", bg: "#dcfce7", color: "#16a34a" };
       case "completed":
-        return { label: "Selesai", bg: "#dcfce7", color: "#16a34a" };
+        return { label: "Pesanan selesai", bg: "#dcfce7", color: "#16a34a" };
       case "cancelled":
-        return { label: "Dibatalkan", bg: "#fee2e2", color: "#dc2626" };
+        return { label: "Pesanan dibatalkan", bg: "#fee2e2", color: "#dc2626" };
+      case "rejected": {
+        const paidDigital =
+          order.paymentMethod === "digital" &&
+          order.paymentStatus !== "pending";
+        return {
+          label: paidDigital
+            ? "Pesanan ditolak, dana dikembalikan"
+            : "Pesanan ditolak",
+          bg: "#fee2e2",
+          color: "#dc2626",
+        };
+      }
       case "expired":
         return { label: "Kedaluwarsa (15m)", bg: "#fee2e2", color: "#dc2626" };
       default:
-        return { label: status, bg: "#f1f5f9", color: "#64748b" };
+        return { label: order.status, bg: "#f1f5f9", color: "#64748b" };
     }
   };
 
@@ -269,7 +283,7 @@ export function OrdersScreen({
           ) : (
             <View style={styles.activeSection}>
               {activeOrders.map((order) => {
-                const badge = getStatusBadge(order.status);
+                const badge = getStatusBadge(order);
                 const firstItem = order.items[0];
                 const activePrice = order.finalServiceAmount || order.subtotalEstimate;
 
@@ -407,6 +421,7 @@ export function OrdersScreen({
               historyOrders.map((item) => {
                 const isCompleted = item.status === "completed";
                 const activePrice = item.finalServiceAmount || item.subtotalEstimate;
+                const badge = getStatusBadge(item);
 
                 return (
                   <View key={item.id} style={styles.historyCard}>
@@ -414,6 +429,21 @@ export function OrdersScreen({
                       <Text style={styles.historyOutlet}>{item.outletName}</Text>
                       <Text style={styles.historyDate}>{item.serviceDate}</Text>
                     </View>
+
+                    {/* Label status berwarna */}
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: badge.bg, marginTop: 6, marginBottom: 0 },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.statusBadgeText, { color: badge.color }]}
+                      >
+                        {badge.label}
+                      </Text>
+                    </View>
+
                     <Text style={styles.historyService}>
                       {item.items[0]?.serviceName} • {item.items[0]?.quantity}{" "}
                       {item.items[0]?.unit}

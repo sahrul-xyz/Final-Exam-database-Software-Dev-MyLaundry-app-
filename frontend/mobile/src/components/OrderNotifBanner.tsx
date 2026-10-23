@@ -10,10 +10,15 @@ import { supabase } from "../services/supabase";
 
 const STATUS_LABEL: Record<string, string> = {
   pending_payment: "Menunggu pembayaran",
-  pending_partner: "Menunggu konfirmasi outlet",
-  processing: "Sedang diproses",
-  completed: "Selesai",
-  cancelled: "Dibatalkan",
+  pending_partner: "Menunggu konfirmasi mitra",
+  accepted: "Pesanan diterima",
+  awaiting_customer_approval: "Menunggu persetujuan biaya",
+  processing: "Sedang dicuci",
+  ready_for_pickup: "Siap diambil",
+  completed: "Pesanan selesai",
+  cancelled: "Pesanan dibatalkan",
+  rejected: "Pesanan ditolak",
+  expired: "Pesanan kedaluwarsa",
 };
 
 export function OrderNotifBanner({
@@ -47,20 +52,42 @@ export function OrderNotifBanner({
     hideTimer.current = setTimeout(hide, 5000);
   };
 
+  // Cek apakah pesanan dibayar digital (buat teks "dana dikembalikan")
+  const isPaidDigital = async (orderId: string) => {
+    try {
+      const { data } = await supabase
+        .from("orders")
+        .select("payment_method, payment_status")
+        .eq("id", orderId)
+        .maybeSingle();
+      return (
+        data?.payment_method === "digital" && data?.payment_status !== "pending"
+      );
+    } catch {
+      return false;
+    }
+  };
+
   useEffect(() => {
     const channel = supabase
       .channel("order-status-live-" + Math.random().toString(36).substring(7))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "order_status_history" },
-        (payload: any) => {
+        async (payload: any) => {
+          // abaikan perubahan yang dibuat pelanggan sendiri
           if (payload.new?.changed_by === customerId) return;
           const s = payload.new?.new_status;
-          show(
-            s
-              ? `Pesananmu sekarang: ${STATUS_LABEL[s] || s}`
-              : "Ada update pesanan baru"
-          );
+          if (!s) {
+            show("Ada update pesanan baru");
+            return;
+          }
+          let text = STATUS_LABEL[s] || s;
+          if (s === "rejected" && payload.new?.order_id) {
+            const paid = await isPaidDigital(payload.new.order_id);
+            if (paid) text = "Pesanan ditolak, dana dikembalikan";
+          }
+          show(text);
         }
       )
       .subscribe();
