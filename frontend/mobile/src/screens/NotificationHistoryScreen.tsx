@@ -21,17 +21,83 @@ type HistoryItem = {
   created_at: string;
   orders: {
     order_number: string;
+    payment_method: string | null;
+    payment_status: string | null;
     laundry_outlets: { name: string } | null;
   } | null;
 };
 
+// Judul notifikasi (sama dengan banner)
 const statusText: Record<string, string> = {
   pending_payment: "Menunggu pembayaran",
-  pending_partner: "Menunggu konfirmasi outlet",
-  processing: "Laundry sedang diproses",
+  pending_partner: "Menunggu konfirmasi mitra",
+  accepted: "Pesanan diterima",
+  awaiting_customer_approval: "Menunggu persetujuan biaya",
+  processing: "Sedang dicuci",
+  ready_for_pickup: "Siap diambil",
+  completed: "Pesanan selesai",
   cancelled: "Pesanan dibatalkan",
-  completed: "Laundry sudah selesai",
+  rejected: "Pesanan ditolak",
+  expired: "Pesanan kedaluwarsa",
 };
+
+// Catatan yang jelas untuk tiap status
+const statusNote: Record<string, string> = {
+  pending_payment: "Selesaikan pembayaran sebelum batas waktu 15 menit.",
+  pending_partner: "Pesananmu sudah masuk, menunggu mitra menerima.",
+  accepted: "Mitra sudah menerima pesananmu.",
+  awaiting_customer_approval:
+    "Mitra sudah menimbang pakaianmu. Cek dan setujui biaya di tab Pesanan.",
+  processing: "Mitra sedang mencuci pakaianmu.",
+  ready_for_pickup: "Laundry kamu sudah siap diambil.",
+  completed: "Laundry kamu sudah selesai. Terima kasih sudah memakai MyLaundry.",
+  cancelled: "Pesananmu dibatalkan.",
+  rejected: "Mitra tidak dapat memproses pesananmu.",
+  expired: "Pesanan melewati batas waktu dan otomatis dibatalkan.",
+};
+
+// Pesanan ditolak + sudah bayar digital => dana dikembalikan
+function getStatusTitle(item: HistoryItem): string {
+  if (item.new_status === "rejected") {
+    const paidDigital =
+      item.orders?.payment_method === "digital" &&
+      item.orders?.payment_status !== "pending";
+    return paidDigital
+      ? "Pesanan ditolak, dana dikembalikan"
+      : "Pesanan ditolak";
+  }
+  return statusText[item.new_status] ?? item.new_status.replace(/_/g, " ");
+}
+
+// Ubah catatan mentah jadi kalimat yang jelas
+function getNoteText(item: HistoryItem): string | null {
+  const note = item.note?.trim();
+
+  // Catatan kosong -> pakai kalimat standar sesuai status
+  if (!note) return statusNote[item.new_status] ?? null;
+
+  // Catatan buatan app
+  if (note === "Pesanan dibuat oleh pelanggan") {
+    return "Pesananmu berhasil dibuat. Selesaikan pembayaran sebelum 15 menit.";
+  }
+  if (note.startsWith("Pembayaran digital simulasi berhasil")) {
+    return "Pembayaran digital berhasil. Pesananmu diteruskan ke mitra.";
+  }
+  if (note.startsWith("Pelanggan menyetujui penyesuaian biaya")) {
+    return "Kamu menyetujui penyesuaian biaya. Mitra mulai mencuci pakaianmu.";
+  }
+  if (note.startsWith("Pelanggan menolak penyesuaian biaya")) {
+    return "Kamu menolak penyesuaian biaya, pesanan dibatalkan.";
+  }
+
+  // Catatan mentah dari outlet: "Status diperbarui menjadi: completed"
+  if (note.startsWith("Status diperbarui menjadi:")) {
+    return statusNote[item.new_status] ?? null;
+  }
+
+  // Catatan lain (misal alasan ditolak dari mitra) dipakai apa adanya
+  return note;
+}
 
 export function NotificationHistoryScreen({ customerId, onBack }: Props) {
   const [items, setItems] = useState<HistoryItem[]>([]);
@@ -42,7 +108,7 @@ export function NotificationHistoryScreen({ customerId, onBack }: Props) {
     const { data, error } = await supabase
       .from("order_status_history")
       .select(
-        "id, new_status, note, created_at, orders!inner(order_number, customer_id, laundry_outlets(name))"
+        "id, new_status, note, created_at, orders!inner(order_number, customer_id, payment_method, payment_status, laundry_outlets(name))"
       )
       .eq("orders.customer_id", customerId)
       .order("created_at", { ascending: false });
@@ -84,22 +150,24 @@ export function NotificationHistoryScreen({ customerId, onBack }: Props) {
         ListEmptyComponent={
           <Text style={styles.empty}>Belum ada notifikasi</Text>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {statusText[item.new_status] ??
-                item.new_status.replace(/_/g, " ")}
-            </Text>
-            <Text style={styles.cardSub}>
-              {item.orders?.order_number} •{" "}
-              {item.orders?.laundry_outlets?.name ?? "Outlet Laundry"}
-            </Text>
-            {item.note ? <Text style={styles.cardNote}>{item.note}</Text> : null}
-            <Text style={styles.cardTime}>
-              {new Date(item.created_at).toLocaleString("id-ID")}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const noteText = getNoteText(item);
+          return (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>{getStatusTitle(item)}</Text>
+              <Text style={styles.cardSub}>
+                {item.orders?.order_number} •{" "}
+                {item.orders?.laundry_outlets?.name ?? "Outlet Laundry"}
+              </Text>
+              {noteText ? (
+                <Text style={styles.cardNote}>{noteText}</Text>
+              ) : null}
+              <Text style={styles.cardTime}>
+                {new Date(item.created_at).toLocaleString("id-ID")}
+              </Text>
+            </View>
+          );
+        }}
       />
     </View>
   );
