@@ -23,6 +23,7 @@ import {
   MapProvider,
   resolveOutletCoordinates,
 } from "../utils/maps";
+import { reverseGeocodeCoordinate } from "../utils/location";
 
 const GOOGLE_MAPS_API_KEY =
   process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
@@ -35,17 +36,28 @@ export function MapScreen({
   visible,
   onClose,
   onSelectOutlet,
+  currentLocation,
+  currentLocationName,
+  onLocationChange,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelectOutlet?: (outlet: Outlet) => void;
+  currentLocation?: Coordinate | null;
+  currentLocationName?: string;
+  onLocationChange?: (coord: Coordinate, name?: string) => void;
 }) {
   const webRef = useRef<WebView>(null);
   const manualPickRef = useRef(false);
 
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(
+    currentLocation ?? null
+  );
+  const [localLocationName, setLocalLocationName] = useState<string | null>(
+    currentLocationName ?? null
+  );
   const [gpsLocation, setGpsLocation] = useState<Coordinate | null>(null);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [locationState, setLocationState] = useState<LocationState>("idle");
@@ -89,6 +101,10 @@ export function MapScreen({
       setAccuracy(position.coords.accuracy ?? null);
       if (!manualPickRef.current) {
         setUserLocation(coordinate);
+        reverseGeocodeCoordinate(coordinate).then((name) => {
+          setLocalLocationName(name);
+          onLocationChange?.(coordinate, name);
+        });
       }
       setLocationState("granted");
     } catch {
@@ -116,9 +132,15 @@ export function MapScreen({
 
   useEffect(() => {
     if (!visible) return;
+    if (currentLocation && !userLocation) {
+      setUserLocation(currentLocation);
+    }
+    if (currentLocationName && !localLocationName) {
+      setLocalLocationName(currentLocationName);
+    }
     manualPickRef.current = false;
     requestLocation();
-  }, [visible, requestLocation]);
+  }, [visible, requestLocation, currentLocation, currentLocationName]);
 
   useEffect(() => {
     if (!visible || locationState !== "granted") return;
@@ -142,6 +164,10 @@ export function MapScreen({
         if (!manualPickRef.current) {
           setUserLocation(coordinate);
           setAccuracy(position.coords.accuracy ?? null);
+          reverseGeocodeCoordinate(coordinate).then((name) => {
+            setLocalLocationName(name);
+            onLocationChange?.(coordinate, name);
+          });
         }
       }
     )
@@ -193,8 +219,10 @@ export function MapScreen({
         outlets: mappableOutlets,
         center,
         provider,
+        userLocation,
+        userAccuracy: accuracy,
       }),
-    [mappableOutlets, center, provider]
+    [mappableOutlets, center, provider, userLocation, accuracy]
   );
 
   const nearestOutlet = useMemo(() => {
@@ -239,15 +267,36 @@ export function MapScreen({
     sendUserLocation(false);
   }, [webReady, userLocation, accuracy, sendUserLocation]);
 
-  const centerOnUser = () => {
+  const centerOnUser = async () => {
     if (locationState !== "granted") {
       requestLocation();
       return;
     }
 
-    if (gpsLocation) {
-      manualPickRef.current = false;
-      setUserLocation(gpsLocation);
+    manualPickRef.current = false;
+    try {
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const coordinate = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+      setGpsLocation(coordinate);
+      setUserLocation(coordinate);
+      setAccuracy(position.coords.accuracy ?? null);
+      reverseGeocodeCoordinate(coordinate).then((name) => {
+        setLocalLocationName(name);
+        onLocationChange?.(coordinate, name);
+      });
+    } catch {
+      if (gpsLocation) {
+        setUserLocation(gpsLocation);
+        reverseGeocodeCoordinate(gpsLocation).then((name) => {
+          setLocalLocationName(name);
+          onLocationChange?.(gpsLocation, name);
+        });
+      }
     }
 
     webRef.current?.injectJavaScript(`
@@ -291,12 +340,18 @@ export function MapScreen({
 
     if (data.type === "userPicked") {
       manualPickRef.current = true;
-      setUserLocation({
+      const picked = {
         latitude: data.lat,
         longitude: data.lng,
-      });
+      };
+      setUserLocation(picked);
       setAccuracy(null);
       setPickMode(false);
+
+      reverseGeocodeCoordinate(picked).then((name) => {
+        setLocalLocationName(name);
+        onLocationChange?.(picked, name);
+      });
 
       webRef.current?.injectJavaScript(`
         window.postMessage(JSON.stringify({ type: 'setPickMode', enabled: false }), '*');
@@ -434,11 +489,18 @@ export function MapScreen({
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Posisi Anda</Text>
-            <Text style={styles.infoValue}>
-              {userLocation
-                ? `${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}`
-                : "Belum ditemukan"}
-            </Text>
+            <View style={styles.infoValueWrap}>
+              {localLocationName || currentLocationName ? (
+                <Text style={styles.infoLocationName} numberOfLines={1}>
+                  📍 {localLocationName || currentLocationName}
+                </Text>
+              ) : null}
+              <Text style={styles.infoValue}>
+                {userLocation
+                  ? `${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}`
+                  : "Belum ditemukan"}
+              </Text>
+            </View>
           </View>
 
           {nearestOutlet && (
@@ -705,6 +767,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#64748b",
     fontWeight: "700",
+  },
+  infoValueWrap: {
+    flex: 1,
+    alignItems: "flex-end",
+    marginLeft: 12,
+  },
+  infoLocationName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0878f9",
+    marginBottom: 2,
+    textAlign: "right",
   },
   infoValue: {
     fontSize: 11,

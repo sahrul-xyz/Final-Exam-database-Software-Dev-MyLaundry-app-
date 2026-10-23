@@ -8,6 +8,7 @@ import {
   StatusBar,
   Modal,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
@@ -23,6 +24,8 @@ import {
   signOutCustomer,
   fetchCustomerOrders,
 } from "./src/services/supabase";
+import { Coordinate } from "./src/utils/maps";
+import { getCurrentUserLocation } from "./src/utils/location";
 
 // Status yang dianggap selesai (sama dengan tab Riwayat di OrdersScreen)
 const FINISHED_STATUSES = ["completed", "cancelled", "rejected", "expired"];
@@ -40,6 +43,11 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [hasActiveOrders, setHasActiveOrders] = useState(false);
 
+  // Status lokasi pengguna terpusat (sinkron dengan Header & Peta Outlet)
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [locationName, setLocationName] = useState<string>("Setiabudi, Bandung");
+  const [isLocating, setIsLocating] = useState(false);
+
   const goTab = (tab: TabName) => {
     setShowNotifications(false);
     setActiveTab(tab);
@@ -52,7 +60,46 @@ export default function App() {
       }
       setLoadingSession(false);
     });
+
+    // Deteksi awal jika izin GPS sudah aktif
+    getCurrentUserLocation(false).then((res) => {
+      if (res) {
+        setUserLocation(res.coordinate);
+        setLocationName(res.locationName);
+      }
+    });
   }, []);
+
+  // Handler untuk refresh lokasi GPS pengguna
+  const handleRefreshLocation = async () => {
+    setIsLocating(true);
+    try {
+      const res = await getCurrentUserLocation(true);
+      if (res) {
+        setUserLocation(res.coordinate);
+        setLocationName(res.locationName);
+      } else {
+        Alert.alert(
+          "Izin Lokasi Diperlukan",
+          "Aktifkan izin lokasi di pengaturan perangkat untuk memperbarui lokasi otomatis, atau tentukan titik di peta outlet.",
+          [
+            { text: "Batal", style: "cancel" },
+            { text: "Buka Peta", onPress: () => setMapVisible(true) },
+          ]
+        );
+      }
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  // Handler update lokasi ketika user berpindah/memilih pin di Peta
+  const handleLocationChangeFromMap = (coord: Coordinate, name?: string) => {
+    setUserLocation(coord);
+    if (name) {
+      setLocationName(name);
+    }
+  };
 
   // Titik merah tab Pesanan: nyala kalau ada pesanan yang belum selesai.
   // Dicek ulang tiap 15 detik (tanpa realtime, jadi nggak bentrok dengan layar lain).
@@ -118,6 +165,10 @@ export default function App() {
           <>
             {activeTab === "beranda" && (
               <HomeScreen
+                locationName={locationName}
+                isLocating={isLocating}
+                userLocation={userLocation}
+                onRefreshLocation={handleRefreshLocation}
                 onSelectOutlet={(outlet, category) => {
                   setSelectedOutlet(outlet);
                   setSelectedCategory(category);
@@ -244,6 +295,9 @@ export default function App() {
       >
         <MapScreen
           visible={mapVisible}
+          currentLocation={userLocation}
+          currentLocationName={locationName}
+          onLocationChange={handleLocationChangeFromMap}
           onClose={() => setMapVisible(false)}
           onSelectOutlet={(outlet) => {
             setMapVisible(false);

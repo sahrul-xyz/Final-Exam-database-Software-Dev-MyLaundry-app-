@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,12 @@ import { Header } from "../components/Header";
 import { OutletCard } from "../components/OutletCard";
 import { getLiveOutlets, fallbackOutlets } from "../services/supabase";
 import { Outlet, ServiceCategory } from "../types";
+import {
+  Coordinate,
+  formatDistanceKm,
+  haversineDistanceKm,
+  resolveOutletCoordinates,
+} from "../utils/maps";
 
 const QUICK_SERVICES: {
   key: ServiceCategory;
@@ -49,10 +55,18 @@ const QUICK_SERVICES: {
 ];
 
 export function HomeScreen({
+  locationName = "Setiabudi, Bandung",
+  isLocating = false,
+  userLocation = null,
+  onRefreshLocation,
   onSelectOutlet,
   onOpenMap,
   onOpenNotifications,
 }: {
+  locationName?: string;
+  isLocating?: boolean;
+  userLocation?: Coordinate | null;
+  onRefreshLocation?: () => Promise<void> | void;
   onSelectOutlet?: (outlet: Outlet, category?: ServiceCategory) => void;
   onOpenMap?: () => void;
   onOpenNotifications?: () => void;
@@ -68,15 +82,64 @@ export function HomeScreen({
     setRefreshing(false);
   };
 
+  const handleRefreshAll = async () => {
+    setRefreshing(true);
+    await Promise.allSettled([loadData(), onRefreshLocation?.()]);
+    setRefreshing(false);
+  };
+
   useEffect(() => {
     loadData();
   }, []);
 
-  const filteredOutlets = outlets.filter(
+  // Hitung jarak dinamis outlet dari koordinat lokasi pengguna saat ini
+  const resolvedOutlets = useMemo(() => {
+    const mappable = resolveOutletCoordinates(outlets);
+    if (!userLocation) {
+      return mappable;
+    }
+
+    return mappable
+      .map((outlet) => {
+        const km = haversineDistanceKm(userLocation, {
+          latitude: outlet.latitude,
+          longitude: outlet.longitude,
+        });
+        return {
+          ...outlet,
+          distance: formatDistanceKm(km),
+          distanceKm: km,
+        };
+      })
+      .sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+  }, [outlets, userLocation]);
+
+  const filteredOutlets = resolvedOutlets.filter(
     (o) =>
       o.name.toLowerCase().includes(search.toLowerCase()) ||
-      o.address.toLowerCase().includes(search.toLowerCase()),
+      o.address.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleLocationPress = () => {
+    Alert.alert(
+      "Lokasi Saat Ini",
+      `Lokasi aktif:\n📍 ${locationName}\n\nPilih tindakan:`,
+      [
+        {
+          text: "🔄 Perbarui GPS",
+          onPress: () => onRefreshLocation?.(),
+        },
+        {
+          text: "🗺️ Buka Peta Outlet",
+          onPress: () => onOpenMap?.(),
+        },
+        {
+          text: "Batal",
+          style: "cancel",
+        },
+      ]
+    );
+  };
 
   // Klik kategori -> langsung buka form pesanan dengan outlet teratas.
   // Outlet bisa diganti di dalam modal lewat tombol "Ganti".
@@ -95,10 +158,16 @@ export function HomeScreen({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={loadData} />
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefreshAll} />
       }
     >
-      <Header onNotificationPress={onOpenNotifications} />
+      <Header
+        location={locationName}
+        isLocating={isLocating}
+        onLocationPress={handleLocationPress}
+        onRefreshLocation={onRefreshLocation}
+        onNotificationPress={onOpenNotifications}
+      />
 
       <View style={styles.welcomeSection}>
         <Text style={styles.greeting}>Selamat pagi,</Text>
