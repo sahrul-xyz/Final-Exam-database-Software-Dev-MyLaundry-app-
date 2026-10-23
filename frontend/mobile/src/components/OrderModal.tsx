@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from "react-native";
 import {
   Outlet,
@@ -23,6 +24,7 @@ import {
   confirmDigitalPaymentSimulation,
   getLiveOutlets,
 } from "../services/supabase";
+import { getProfileAddresses } from "../services/profileAddressService";
 
 const CATEGORY_LABEL: Record<ServiceCategory, string> = {
   kiloan: "Cuci Kiloan",
@@ -75,6 +77,9 @@ export function OrderModal({
   const [showOutletPicker, setShowOutletPicker] = useState(false);
   const [outletOptions, setOutletOptions] = useState<Outlet[]>([]);
   const [loadingOutlets, setLoadingOutlets] = useState(false);
+  const [clothingNotes, setClothingNotes] = useState("");
+  const [pickupTimeSlot, setPickupTimeSlot] = useState("Pagi (08:00 - 11:00)");
+  const [pickupAddress, setPickupAddress] = useState("");
 
   useEffect(() => {
     if (visible) {
@@ -83,8 +88,23 @@ export function OrderModal({
       setPaymentTimer(15 * 60);
       setCurrentOutlet(outlet);
       setShowOutletPicker(false);
+      setClothingNotes("");
+      setPickupTimeSlot("Pagi (08:00 - 11:00)");
+
+      if (customerId) {
+        getProfileAddresses(customerId)
+          .then((addrs) => {
+            const def = addrs.find((a) => a.is_default) || addrs[0];
+            if (def) {
+              setPickupAddress(
+                def.label ? `${def.address_text} (${def.label})` : def.address_text
+              );
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [visible, outlet]);
+  }, [visible, outlet, customerId]);
 
   useEffect(() => {
     if (currentOutlet && visible) {
@@ -155,6 +175,17 @@ export function OrderModal({
     }
 
     setSubmitting(true);
+    const addressPrefix =
+      handoverMethod === "pickup_delivery" && pickupAddress.trim()
+        ? `[Alamat: ${pickupAddress.trim()}] `
+        : "";
+    const pickupSlotPrefix =
+      handoverMethod === "pickup_delivery"
+        ? `[Jemput: ${pickupTimeSlot}] `
+        : "";
+    const formattedNotes =
+      (addressPrefix + pickupSlotPrefix + clothingNotes).trim() || undefined;
+
     const { order, error } = await createCustomerOrder({
       customerId,
       outletId: currentOutlet.id,
@@ -163,6 +194,7 @@ export function OrderModal({
       quantity,
       handoverMethod,
       paymentMethod,
+      notes: formattedNotes,
     });
     setSubmitting(false);
 
@@ -547,6 +579,81 @@ export function OrderModal({
                   <Text style={styles.optionTitle}>Tunai</Text>
                   <Text style={styles.optionSub}>Bayar saat serah terima</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* Section: Catatan Pakaian & Jadwal Jemput */}
+              <Text style={styles.sectionTitle}>5. CATATAN & JADWAL JEMPUT</Text>
+
+              {handoverMethod === "pickup_delivery" && (
+                <>
+                  <View style={styles.addressInputContainer}>
+                    <Text style={styles.inputLabel}>
+                      📍 Alamat Penjemputan / Antar:
+                    </Text>
+                    <TextInput
+                      style={styles.addressInput}
+                      placeholder="Contoh: Jl. Sukajadi No. 45, RT 02/05 (Rumah / Kos)"
+                      placeholderTextColor="#94a3b8"
+                      value={pickupAddress}
+                      onChangeText={setPickupAddress}
+                      multiline
+                      numberOfLines={2}
+                    />
+                  </View>
+
+                  <View style={styles.pickupTimeContainer}>
+                    <Text style={styles.inputLabel}>
+                      Pilihan Waktu Penjemputan (Pickup):
+                    </Text>
+                  <View style={styles.timeSlotRow}>
+                    {[
+                      "Pagi (08:00 - 11:00)",
+                      "Siang (11:00 - 14:00)",
+                      "Sore (15:00 - 18:00)",
+                    ].map((slot) => {
+                      const isSelected = pickupTimeSlot === slot;
+                      return (
+                        <TouchableOpacity
+                          key={slot}
+                          style={[
+                            styles.timeSlotPill,
+                            isSelected && styles.timeSlotPillActive,
+                          ]}
+                          onPress={() => setPickupTimeSlot(slot)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.timeSlotText,
+                              isSelected && styles.timeSlotTextActive,
+                            ]}
+                          >
+                            {slot}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            )}
+
+              <View style={styles.notesContainer}>
+                <Text style={styles.inputLabel}>
+                  Rincian Pakaian / Instruksi Khusus:
+                </Text>
+                <TextInput
+                  style={styles.notesInput}
+                  placeholder="Misal: 3 kemeja kerja putih, 2 celana jeans. Tolong pisahkan warna luntur..."
+                  placeholderTextColor="#94a3b8"
+                  value={clothingNotes}
+                  onChangeText={setClothingNotes}
+                  multiline
+                  numberOfLines={3}
+                />
+                <Text style={styles.notesHelper}>
+                  *Membantu mitra memverifikasi pakaian & mencegah risiko tertukar atau hilang.
+                </Text>
               </View>
 
               {/* Ringkasan Estimasi Biaya */}
@@ -1114,6 +1221,75 @@ const styles = StyleSheet.create({
   payLaterBtn: {
     alignItems: "center",
     paddingVertical: 12,
+  },
+  pickupTimeContainer: {
+    marginBottom: 14,
+  },
+  addressInputContainer: {
+    marginBottom: 14,
+  },
+  addressInput: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    padding: 10,
+    fontSize: 13,
+    color: "#0f172a",
+    textAlignVertical: "top",
+    minHeight: 52,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  timeSlotRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  timeSlotPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+  },
+  timeSlotPillActive: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#0878f9",
+  },
+  timeSlotText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  timeSlotTextActive: {
+    color: "#0878f9",
+    fontWeight: "700",
+  },
+  notesContainer: {
+    marginBottom: 16,
+  },
+  notesInput: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 13,
+    color: "#0f172a",
+    textAlignVertical: "top",
+    minHeight: 64,
+  },
+  notesHelper: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 6,
+    fontStyle: "italic",
   },
   payLaterBtnText: {
     color: "#475569",

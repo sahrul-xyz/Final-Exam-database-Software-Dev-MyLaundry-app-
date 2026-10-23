@@ -834,6 +834,7 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
         payment_status,
         subtotal_estimate,
         final_service_amount,
+        notes,
         created_at,
         order_items (
           id,
@@ -851,6 +852,18 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
         laundry_outlets:outlet_id (
           id,
           name
+        ),
+        reviews (
+          id,
+          rating,
+          comment,
+          created_at
+        ),
+        complaints (
+          id,
+          reason,
+          status,
+          created_at
         )
       `);
 
@@ -870,6 +883,47 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
       return [];
     }
 
+    // Ambil customer ID unik untuk memastikan data profil & alamat terambil optimal
+    const customerIds = Array.from(
+      new Set(data.map((item: any) => item.customer_id).filter(Boolean))
+    );
+
+    const profileMap = new Map<string, { full_name: string; phone: string }>();
+    const addressMap = new Map<string, string>();
+
+    if (customerIds.length > 0) {
+      try {
+        const { data: profRows } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone")
+          .in("id", customerIds);
+        if (profRows) {
+          profRows.forEach((p: any) => profileMap.set(p.id, p));
+        }
+      } catch (e) {
+        console.warn("fetchPartnerOrders fallback profiles:", e);
+      }
+
+      try {
+        const { data: addrRows } = await supabase
+          .from("addresses")
+          .select("user_id, label, address_text, is_default")
+          .in("user_id", customerIds);
+        if (addrRows && addrRows.length > 0) {
+          for (const addr of addrRows) {
+            const formatted = addr.label
+              ? `${addr.address_text} (${addr.label})`
+              : addr.address_text;
+            if (!addressMap.has(addr.user_id) || addr.is_default) {
+              addressMap.set(addr.user_id, formatted);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("fetchPartnerOrders fallback addresses:", e);
+      }
+    }
+
     return data.map((item: any) => {
       const customer = Array.isArray(item.profiles)
         ? item.profiles[0]
@@ -878,12 +932,60 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
         ? item.laundry_outlets[0]
         : item.laundry_outlets;
 
+      const profFallback = profileMap.get(item.customer_id);
+      const customerName =
+        customer?.full_name || profFallback?.full_name || "Pelanggan MyLaundry";
+      const customerPhone = customer?.phone || profFallback?.phone || "-";
+
+      // Ekstraksi alamat dari catatan jika disertakan saat pemesanan
+      let addressFromNotes: string | null = null;
+      if (item.notes) {
+        const match = item.notes.match(/\[Alamat:\s*([^\]]+)\]/i);
+        if (match) addressFromNotes = match[1].trim();
+      }
+
+      const customerAddress =
+        addressFromNotes ||
+        addressMap.get(item.customer_id) ||
+        (item.handover_method === "drop_off"
+          ? "Drop-off langsung ke outlet"
+          : "Alamat belum diatur pelanggan");
+
+      const rawReview = Array.isArray(item.reviews)
+        ? item.reviews[0]
+        : item.reviews;
+
+      const review =
+        rawReview && rawReview.rating
+          ? {
+              id: rawReview.id,
+              rating: Number(rawReview.rating),
+              comment: rawReview.comment || null,
+              created_at: rawReview.created_at,
+            }
+          : null;
+
+      const rawComplaint = Array.isArray(item.complaints)
+        ? item.complaints[0]
+        : item.complaints;
+
+      const complaint =
+        rawComplaint && rawComplaint.reason
+          ? {
+              id: rawComplaint.id,
+              reason: rawComplaint.reason,
+              status: (rawComplaint.status === "resolved" ? "resolved" : "open") as "open" | "resolved",
+              created_at: rawComplaint.created_at,
+            }
+          : null;
+
       return {
         id: item.id,
         order_number: item.order_number,
         customer_id: item.customer_id,
-        customer_name: customer?.full_name || "Pelanggan MyLaundry",
-        customer_phone: customer?.phone || "-",
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_address: customerAddress,
         outlet_id: item.outlet_id,
         outlet_name: outlet?.name || "Bersih Laundry Setiabudi",
         service_date: item.service_date,
@@ -896,6 +998,9 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
           ? Number(item.final_service_amount)
           : null,
         created_at: item.created_at,
+        notes: item.notes || null,
+        review,
+        complaint,
         items: (item.order_items || []).map((o: any) => ({
           id: o.id,
           service_name_snapshot: o.service_name_snapshot,
@@ -909,6 +1014,81 @@ export async function fetchPartnerOrders(partnerId?: string): Promise<PartnerOrd
   } catch (err: any) {
     console.error("fetchPartnerOrders exception:", err);
     return [];
+  }
+}
+
+export async function fetchPartnerComplaints(): Promise<
+  {
+    id: string;
+    orderId: string;
+    orderNumber: string;
+    customer: string;
+    reason: string;
+    status: "open" | "resolved";
+    date: string;
+  }[]
+> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const { data, error } = await supabase
+      .from("complaints")
+      .select(`
+        id,
+        order_id,
+        reason,
+        status,
+        created_at,
+        resolved_at,
+        orders (
+          order_number,
+          profiles:customer_id ( full_name )
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((c: any) => {
+      const order = Array.isArray(c.orders) ? c.orders[0] : c.orders;
+      const profile = Array.isArray(order?.profiles)
+        ? order.profiles[0]
+        : order?.profiles;
+
+      return {
+        id: c.id,
+        orderId: c.order_id,
+        orderNumber: order?.order_number || "#ML-PESANAN",
+        customer: profile?.full_name || "Pelanggan MyLaundry",
+        reason: c.reason,
+        status: (c.status === "resolved" ? "resolved" : "open") as
+          | "open"
+          | "resolved",
+        date: new Date(c.created_at).toLocaleDateString("id-ID", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+    });
+  } catch (e) {
+    console.error("fetchPartnerComplaints err:", e);
+    return [];
+  }
+}
+
+export async function resolvePartnerComplaint(
+  complaintId: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured) return true;
+  try {
+    const { error } = await supabase
+      .from("complaints")
+      .update({ status: "resolved", resolved_at: new Date().toISOString() })
+      .eq("id", complaintId);
+    return !error;
+  } catch {
+    return false;
   }
 }
 
