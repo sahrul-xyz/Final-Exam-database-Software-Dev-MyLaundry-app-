@@ -63,7 +63,7 @@ cd frontend/mobile
 npm test
 ```
 
-**Test Suite Coverage (25 Automated Tests):**
+**Test Suite Coverage (34 Automated Tests):**
 - Subtotal calculation & minimum quantity validation (`quantity >= 1`)
 - Marketplace commission calculation (5% snapshot)
 - Order expiration rules (15-min digital payment deadline & 30-min partner response deadline)
@@ -71,6 +71,17 @@ npm test
 - Order status state-machine lifecycle & legal transition validation
 - Rupiah currency and Indonesian localized date formatters
 - Map coordinate validation, region calculation & HTML map builder (Google/OSM)
+- User GPS location detection, reverse geocoding & Indonesian address formatting
+---
+
+### 🔄 Alur Layanan & Pembayaran (Weighing-First Flow)
+
+Berdasarkan riset dan validasi pengguna (Bab 5 PRD v1.2 & Hasil Wawancara):
+1. **Pemesanan Estimasi (Pelanggan):** Pelanggan memesan dengan memilih layanan dan memasukkan estimasi berat cucian (status: `pending_partner`).
+2. **Penimbangan Ulang & Harga Fix (Mitra):** Outlet menerima pakaian, melakukan penimbangan riil di outlet, dan menetapkan harga pasti/fix (`final_service_amount`) melalui dashboard (status: `pending_payment`).
+3. **Konfirmasi Pembayaran (Pelanggan):** Pelanggan menerima rincian harga fix secara live, lalu menyelesaikan konfirmasi pembayaran (simulasi digital QRIS atau tunai).
+4. **Pencucian & Selesai:** Setelah pembayaran terkonfirmasi, cucian langsung diproses (`processing`), diselesaikan (`ready_for_pickup` -> `completed`), dan masa garansi komplain 1 jam dimulai.
+
 ---
 
 ## 🔑 Test Accounts (Akun Pengujian)
@@ -79,8 +90,8 @@ Use these credentials to test the application flows:
 
 | Role | Email | Password | Scope & Notes |
 |---|---|---|---|
-| **Partner (Mitra)** | `mitra@mylaundry.com` | `password123` | Manages "Bersih Laundry Setiabudi" outlet, updates orders, changes service prices, views live analytics. |
-| **Customer (Pelanggan)** | `pelanggan@mylaundry.com` | `password123` | Searches outlets, places orders via atomic transactions, tracks order progress in real-time, submits reviews. |
+| **Partner (Mitra)** | `mitra@mylaundry.com` | `password123` | Manages "Bersih Laundry Setiabudi" outlet, re-weighs laundry to set fixed price, updates order status, changes service prices, views live analytics. |
+| **Customer (Pelanggan)** | `pelanggan@mylaundry.com` | `password123` | Searches outlets, places orders with estimated weight, confirms fixed price payment after weighing, tracks order progress in real-time, submits reviews. |
 
 *You can also register new customer or partner accounts directly through the registration forms.*
 
@@ -99,7 +110,7 @@ MyLaundry/
 │   │   │   ├── services/    # Supabase client, atomic RPC calls
 │   │   │   ├── types/       # TypeScript schemas & status enums
 │   │   │   └── utils/       # Formatters, business rule helpers, map HTML builder
-│   │   ├── tests/           # Automated Jest test suites (25 tests)
+│   │   ├── tests/           # Automated Jest test suites (34 tests)
 │   │   └── package.json
 │   └── dashboard/       # Partner Web Dashboard (React + Vite + TypeScript)
 │       ├── src/
@@ -119,7 +130,8 @@ MyLaundry/
 ├── docs/
 │   ├── MyLanundry_PRD.md               # Product Requirements Document (PRD v1.2)
 │   ├── DATABASE_IK301_EVIDENCE.md      # Technical evidence for IK301 (Transactions, Indexes, Analytics)
-│   └── Kerangka_Wawancara_MyLanundry_V1.md # User research & pre-interview validation framework
+│   ├── Kerangka_Wawancara_MyLanundry_V1.md # User research & pre-interview validation framework
+│   └── Hasil_wawancara.md              # Hasil wawancara dengan calon pengguna
 ├── .gitignore
 └── README.md
 ```
@@ -138,4 +150,17 @@ Detailed technical proofs are documented in **[`docs/DATABASE_IK301_EVIDENCE.md`
 6. **Analytics (JOIN & Aggregation):** `v_partner_analytics` and `v_service_sales_report` analytical database views utilizing multiple `JOIN`s, `GROUP BY`, and aggregate functions (`SUM`, `COUNT`, `AVG`, `ROUND`).
 
 ---
+
+## 🤖 AI Usage Statement
+
+In accordance with Section 7 of the Ujian Akhir Startup Pitch guidelines:
+
+- **AI Tools Used:** Google Antigravity / Gemini 3.8 Flash.
+- **Purpose and Scope:**
+  - Automated test scaffolding and test assertion design (`tests/orderBusinessRules.test.ts`, `tests/maps.test.ts`, `tests/location.test.ts`, `tests/formatters.test.ts`).
+  - Query plan benchmarking and indexing structure review for PostgreSQL (`v_partner_analytics`, `v_service_sales_report`).
+  - Refactoring and sanitization of codebase (removing dead code and stabilizing Realtime WebSocket listeners).
+  - Geocoding and map synchronization design for customer real-time location.
+- **Academic Integrity Statement:** All application architectures, data models, business rules, and technical implementations have been reviewed, verified, and are fully understood by each team member for defense during the live presentation.
+
 

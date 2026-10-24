@@ -62,8 +62,8 @@ serve(async (req) => {
           changed_by: null,
           note:
             order.status === "pending_payment"
-              ? "Pesanan kedaluwarsa otomatis: Melewati batas waktu pembayaran digital 15 menit."
-              : "Pesanan kedaluwarsa otomatis: Mitra tidak mengonfirmasi pesanan tunai dalam batas 30 menit.",
+              ? "Pesanan kedaluwarsa otomatis: Melewati batas waktu konfirmasi pembayaran harga fix 15 menit."
+              : "Pesanan kedaluwarsa otomatis: Mitra tidak mengonfirmasi pesanan dalam batas 30 menit.",
         });
 
         // C. Lepas kapasitas harian yang sebelumnya ditahan (committed/held -> released)

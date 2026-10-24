@@ -18,6 +18,7 @@ import {
   submitCustomerComplaint,
   respondToPriceAdjustment,
   confirmDigitalPaymentSimulation,
+  confirmCashPaymentAfterWeighing,
   subscribeToCustomerOrders,
 } from "../services/supabase";
 
@@ -68,24 +69,36 @@ export function OrdersScreen({
     setRefreshing(false);
   };
 
-  // Handlers untuk persetujuan biaya & pembayaran simulasi
+  // Handlers untuk konfirmasi pembayaran setelah timbangan & penetapan harga fix
   const handleConfirmPayment = async (order: CustomerOrder) => {
     if (!customerId) return;
+    const finalAmount = order.finalServiceAmount || order.subtotalEstimate;
     setProcessingAction(order.id);
-    const { success, error } = await confirmDigitalPaymentSimulation({
-      orderId: order.id,
-      customerId,
-      amount: order.finalServiceAmount || order.subtotalEstimate,
-    });
+
+    const isDigital = order.paymentMethod === "digital";
+    const res = isDigital
+      ? await confirmDigitalPaymentSimulation({
+          orderId: order.id,
+          customerId,
+          amount: finalAmount,
+        })
+      : await confirmCashPaymentAfterWeighing({
+          orderId: order.id,
+          customerId,
+          amount: finalAmount,
+        });
+
     setProcessingAction(null);
-    if (success) {
+    if (res.success) {
       Alert.alert(
-        "Pembayaran Berhasil",
-        "Pembayaran digital simulasi telah terkonfirmasi. Pesanan diteruskan ke Mitra."
+        isDigital ? "Pembayaran Berhasil! 🎉" : "Pesanan Dikonfirmasi! 🎉",
+        isDigital
+          ? `Pembayaran harga fix Rp${finalAmount.toLocaleString("id-ID")} berhasil diverifikasi. Pihak outlet segera mulai mencuci pakaian Anda!`
+          : `Konfirmasi tagihan fix Rp${finalAmount.toLocaleString("id-ID")} (Tunai) telah dikirim ke outlet. Cucian Anda segera diproses cuci!`
       );
       loadOrders();
     } else {
-      Alert.alert("Gagal", error || "Gagal memproses pembayaran");
+      Alert.alert("Gagal", res.error || "Gagal memproses konfirmasi pembayaran");
     }
   };
 
@@ -191,9 +204,9 @@ export function OrdersScreen({
   const getStatusBadge = (order: CustomerOrder) => {
     switch (order.status) {
       case "pending_payment":
-        return { label: "Menunggu Bayar", bg: "#fef3c7", color: "#d97706" };
+        return { label: "Menunggu Bayar (Harga Fix)", bg: "#fef3c7", color: "#d97706" };
       case "pending_partner":
-        return { label: "Menunggu Mitra", bg: "#e0f2fe", color: "#0284c7" };
+        return { label: "Menunggu Timbangan Mitra", bg: "#e0f2fe", color: "#0284c7" };
       case "accepted":
         return { label: "Pesanan Diterima", bg: "#dbeafe", color: "#2563eb" };
       case "awaiting_customer_approval":
@@ -387,24 +400,54 @@ export function OrdersScreen({
                       </View>
                     )}
 
-                    {/* Status 2: Menunggu Pembayaran Digital Simulasi */}
-                    {order.status === "pending_payment" && (
-                      <View style={[styles.actionBanner, { backgroundColor: "#eff6ff", borderColor: "#bfdbfe" }]}>
-                        <Text style={[styles.actionBannerTitle, { color: "#1d4ed8" }]}>
-                          💳 Pembayaran Digital Simulasi
+                    {/* Status Menunggu Konfirmasi & Timbangan Mitra */}
+                    {order.status === "pending_partner" && (
+                      <View style={[styles.actionBanner, { backgroundColor: "#f0f9ff", borderColor: "#bae6fd" }]}>
+                        <Text style={[styles.actionBannerTitle, { color: "#0369a1" }]}>
+                          ⚖️ Menunggu Timbangan Mitra
                         </Text>
                         <Text style={styles.actionBannerText}>
-                          Selesaikan simulasi pembayaran sebelum tenggat 15 menit berakhir.
+                          Pesanan telah diterima outlet. Mitra sedang menyiapkan penimbangan ulang cucian Anda untuk menetapkan rincian harga fix.
                         </Text>
+                      </View>
+                    )}
+
+                    {/* Status Menunggu Pembayaran Tagihan Fix */}
+                    {order.status === "pending_payment" && (
+                      <View style={[styles.actionBanner, { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" }]}>
+                        <Text style={[styles.actionBannerTitle, { color: "#15803d" }]}>
+                          💳 Konfirmasi Pembayaran (Harga Fix)
+                        </Text>
+                        <Text style={styles.actionBannerText}>
+                          Mitra telah selesai menimbang ulang cucian Anda. Silakan selesaikan konfirmasi pembayaran agar cucian dapat langsung mulai diproses.
+                        </Text>
+
+                        <View style={{ marginTop: 8, padding: 10, backgroundColor: "#ffffff", borderRadius: 8, borderWidth: 1, borderColor: "#dcfce7" }}>
+                          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                            <Text style={{ fontSize: 12, color: "#64748b" }}>Timbangan Aktual:</Text>
+                            <Text style={{ fontSize: 13, fontWeight: "700", color: "#1e293b" }}>
+                              {order.items?.[0]?.quantity || 1} {order.items?.[0]?.unit || "kg"}
+                            </Text>
+                          </View>
+                          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                            <Text style={{ fontSize: 12, color: "#64748b" }}>Total Tagihan Fix:</Text>
+                            <Text style={{ fontSize: 14, fontWeight: "800", color: "#15803d" }}>
+                              Rp{(order.finalServiceAmount || order.subtotalEstimate).toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+                        </View>
+
                         <TouchableOpacity
-                          style={[styles.btnAction, styles.btnApprove, { marginTop: 8 }]}
+                          style={[styles.btnAction, styles.btnApprove, { marginTop: 10 }]}
                           onPress={() => handleConfirmPayment(order)}
                           disabled={processingAction === order.id}
                         >
                           <Text style={styles.btnApproveText}>
                             {processingAction === order.id
-                              ? "Memverifikasi..."
-                              : "✓ Konfirmasi Pembayaran (Simulasi)"}
+                              ? "Memproses..."
+                              : order.paymentMethod === "digital"
+                              ? "✓ Bayar Sekarang (Simulasi QRIS)"
+                              : "✓ Konfirmasi Siap Bayar Tunai"}
                           </Text>
                         </TouchableOpacity>
                       </View>

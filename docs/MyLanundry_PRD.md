@@ -182,30 +182,32 @@ Target berikut digunakan sebagai kriteria pengujian proyek, bukan klaim performa
 3. Pelanggan melihat katalog outlet.
 4. Pelanggan mencari atau memilih outlet.
 5. Pelanggan melihat detail outlet dan layanan.
-6. Pelanggan memilih layanan, jumlah atau perkiraan berat, serta metode penyerahan.
-7. Sistem menampilkan estimasi biaya dan ringkasan pesanan.
-8. Backend memeriksa kapasitas kilogram pada tanggal layanan dan menahan kapasitas secara atomik.
-9. Pelanggan memilih metode simulasi pembayaran digital atau tunai.
-10. Untuk pembayaran digital, pelanggan menyelesaikan simulasi dalam 15 menit; jika belum terverifikasi, pesanan kedaluwarsa dan reservasi dilepas.
-11. Untuk tunai, mitra menerima/menolak dalam 30 menit; jika tidak merespons, pesanan kedaluwarsa dan reservasi dilepas.
-12. Mitra memverifikasi berat aktual. Jika harga naik, pelanggan harus menyetujuinya sebelum pengerjaan dilanjutkan.
-13. Mitra memperbarui status; pelanggan menerima pembaruan melalui Supabase Realtime.
-14. Saat mitra menandai pesanan selesai, backend memulai masa komplain 1 jam.
-15. Jika tidak ada komplain terbuka setelah 1 jam, payout simulasi diproses otomatis dan komisi dihitung.
-16. Jika ada komplain, payout simulasi ditahan sampai resolusi dijalankan.
-17. Pelanggan dapat memberi rating dan ulasan setelah pesanan selesai.
+6. Pelanggan memilih layanan, memasukkan perkiraan/estimasi berat cucian (kuantitas), metode penyerahan (antar-jemput atau drop-off), serta catatan pakaian/preferensi jemput.
+7. Sistem menampilkan estimasi biaya awal dan ringkasan pesanan.
+8. Backend memeriksa kapasitas kilogram pada tanggal layanan dan menahan kuota secara atomik.
+9. Pelanggan memilih preferensi metode pembayaran (simulasi digital QRIS atau tunai), lalu mengirim pesanan (status: `pending_partner`).
+10. Pesanan masuk ke antrean outlet untuk diverifikasi dan ditimbang ulang secara akurat.
+11. Setelah outlet menimbang ulang pakaian dan menginput berat riil, sistem menghitung harga pasti/fix (`final_service_amount`) dan status berubah ke `pending_payment`.
+12. Pelanggan menerima notifikasi pembaruan secara realtime (Supabase Realtime) yang menampilkan rincian berat aktual dan tagihan harga fix.
+13. Pelanggan melakukan konfirmasi pembayaran (menyelesaikan simulasi pembayaran digital QRIS atau konfirmasi siap bayar tunai saat cucian diserahkan).
+14. Setelah pembayaran/tagihan terkonfirmasi, status pesanan otomatis berubah ke `processing` (Sedang Dicuci) dan proses pencucian dimulai.
+15. Mitra menyelesaikan pengerjaan dan memperbarui status menjadi `ready_for_pickup` (Siap Diambil/Diantar) lalu `completed`.
+16. Saat pesanan berstatus `completed`, backend memulai masa komplain 1 jam.
+17. Jika tidak ada komplain terbuka setelah 1 jam, payout simulasi diproses otomatis dan komisi platform dihitung.
+18. Pelanggan dapat memberikan rating bintang (1-5) dan ulasan tertulis setelah pesanan selesai.
 
 ## 5.2 Alur Mitra
 
 1. Mitra mendaftar/login dan membuat outlet.
 2. Mitra melengkapi profil, area layanan, layanan/harga, dan kapasitas harian lalu mengaktifkan outlet.
-3. Mitra membuka pesanan masuk.
-4. Untuk pesanan tunai, mitra menerima/menolak dalam 30 menit.
-5. Mitra mengonfirmasi berat/jumlah aktual.
-6. Jika harga naik, mitra mengajukan penyesuaian dan menunggu persetujuan pelanggan.
-7. Mitra memperbarui status pengerjaan.
-8. Mitra menandai pesanan selesai; masa komplain 1 jam dimulai.
-9. Mitra melihat ringkasan komisi, tagihan komisi tunai, dan payout simulasi.
+3. Mitra membuka pesanan masuk pada tab pesanan (`pending_partner`).
+4. Mitra menerima pesanan fisik dari pelanggan/kurir, memeriksa cucian, dan melakukan penimbangan ulang secara akurat.
+5. Mitra menginput berat riil aktual ke dashboard web via modal "Timbang & Tetapkan Harga".
+6. Sistem secara otomatis menghitung total harga fix berdasarkan snapshot tarif layanan dan menerbitkan tagihan fix ke pelanggan (status berubah menjadi `pending_payment`).
+7. Mitra menunggu pelanggan mengonfirmasi pembayaran (QRIS digital atau konfirmasi tunai).
+8. Begitu pembayaran terverifikasi, status pesanan otomatis berganti menjadi `processing` (Sedang Dicuci).
+9. Mitra mencuci cucian hingga selesai, memperbarui status menjadi `ready_for_pickup` lalu `completed`.
+10. Masa komplain 1 jam dimulai; mitra memantau ringkasan komisi dan payout simulasi.
 
 ## 5.3 User Stories & Acceptance Criteria
 
@@ -267,12 +269,12 @@ Sesuai kriteria evaluasi IK102 Software Development Fundamentals dan instrumen r
   - **AC-07.1 (Pembaruan Tarif Tanpa Merusak Data Lama):** Given mitra mengubah tarif layanan dari Rp8.000 menjadi Rp10.000/kg, When disimpan, Then harga baru berlaku untuk pesanan baru, sementara pesanan lama tetap menjaga harga snapshot di `order_items`.
   - **AC-07.2 (Validasi Nilai Non-Negatif):** Given mitra memasukkan tarif bernilai negatif, When tombol simpan ditekan, Then sistem menampilkan validasi error dan memblokir penyimpanan ke database.
 
-### US-08: Manajemen Operasional & Pembaruan Status Mitra
+### US-08: Manajemen Operasional & Penimbangan Ulang Mitra
 - **Sebagai:** Mitra Laundry
-- **Saya ingin:** Menerima/menolak pesanan masuk, mencatat berat aktual, dan memperbarui status pengerjaan
-- **Agar:** Alur operasional pengerjaan laundry berjalan tertib, transparan, dan tercatat di buku besar
+- **Saya ingin:** Menerima/menolak pesanan masuk, menimbang cucian riil, menetapkan harga fix, dan memperbarui status pengerjaan
+- **Agar:** Alur penagihan transparan berdasarkan berat aktual dan pengerjaan laundry berjalan tertib
 - **Acceptance Criteria (Kriteria Penerimaan):**
-  - **AC-08.1 (Penyesuaian Berat Aktual):** Given pesanan berstatus `accepted`, When mitra menimbang cucian dan memasukkan berat riil, Then total biaya disesuaikan, status berubah ke `processing`, dan audit trail mencatat penyesuaian tersebut.
+  - **AC-08.1 (Penyesuaian Berat Aktual & Penetapan Harga Fix):** Given pesanan berstatus `pending_partner` atau `accepted`, When mitra menimbang cucian dan memasukkan berat riil, Then total biaya pasti/fix dihitung (`final_service_amount`), status berubah ke `pending_payment`, dan tagihan diterbitkan ke pelanggan untuk dikonfirmasi sebelum proses cuci dimulai.
   - **AC-08.2 (Penyelesaian & Penetapan Batas Komplain):** Given cucian selesai dikerjakan, When mitra menandai pesanan `completed`, Then server mencatat `completed_at` dan otomatis menetapkan `complaint_deadline = completed_at + 1 hour`.
 
 # 6. Functional Requirements
@@ -286,17 +288,17 @@ Persyaratan diberi ID agar dapat dilacak ke implementasi dan pengujian.
 | FR-03 | Sistem menampilkan outlet yang aktif | Must | Outlet yang dinonaktifkan oleh mitra tidak tampil di katalog publik |
 | FR-04 | Sistem menyediakan pencarian outlet | Must | Hasil pencarian sesuai nama atau area yang dimasukkan |
 | FR-05 | Sistem menampilkan detail outlet dan layanan | Must | Informasi nama, alamat/area, jam operasional, layanan, harga, dan estimasi tersedia jika diisi |
-| FR-06 | Sistem menghitung estimasi biaya | Must | Total estimasi sesuai harga layanan dan kuantitas yang dipilih |
-| FR-07 | Sistem membuat pesanan | Must | Pesanan tersimpan beserta item, harga saat pemesanan, metode penyerahan, dan pelanggan |
+| FR-06 | Sistem menghitung estimasi biaya awal | Must | Total estimasi dihitung saat pemesanan berdasarkan harga layanan dan estimasi kuantitas/berat |
+| FR-07 | Sistem membuat pesanan | Must | Pesanan tersimpan beserta item, snapshot harga, metode penyerahan, catatan, dan pelanggan |
 | FR-08 | Sistem mencegah pesanan dibuat dengan layanan tidak aktif | Must | Server menolak pesanan dengan layanan yang tidak tersedia |
 | FR-09 | Mitra dapat menerima atau menolak pesanan baru | Must | Hanya mitra pemilik outlet terkait yang dapat melakukan tindakan |
-| FR-10 | Mitra dapat memperbarui status pesanan | Must | Perubahan status mengikuti transisi yang diizinkan dan tercatat |
+| FR-10 | Mitra menimbang ulang dan menetapkan harga fix | Must | Mitra memasukkan berat aktual cucian, sistem menghitung harga fix dan menerbitkan tagihan |
 | FR-11 | Pelanggan dapat melihat riwayat dan detail pesanan sendiri | Must | Pelanggan tidak dapat membaca pesanan milik pengguna lain |
-| FR-12 | Sistem menangani perubahan biaya aktual | Must | Pelanggan harus menyetujui perubahan biaya sebelum pengerjaan dilanjutkan |
+| FR-12 | Pelanggan mengonfirmasi pembayaran tagihan fix | Must | Pelanggan menyelesaikan konfirmasi pembayaran (QRIS/tunai) atas harga fix sebelum cucian diproses cuci |
 | FR-13 | Sistem menyimpan metode dan status pembayaran | Must | Status pembayaran ditampilkan sesuai data yang diverifikasi |
 | FR-14 | Pelanggan dapat memberi rating dan ulasan | Should | Ulasan hanya dapat dibuat untuk pesanan selesai dan tidak dapat diduplikasi untuk pesanan yang sama |
 | FR-15 | Sistem menahan kapasitas kg saat checkout | Must | Reservasi dibuat atomik berdasarkan outlet dan tanggal layanan; kapasitas tidak dapat terlampaui oleh checkout bersamaan |
-| FR-16 | Sistem menangani tenggat pembayaran/respons | Must | Pembayaran digital kedaluwarsa setelah 15 menit jika belum terverifikasi; pesanan tunai kedaluwarsa setelah 30 menit tanpa keputusan mitra |
+| FR-16 | Sistem menangani tenggat pembayaran/respons | Must | Konfirmasi pembayaran harga fix kedaluwarsa setelah 15 menit jika belum diverifikasi; pesanan estimasi kedaluwarsa setelah 30 menit tanpa respons mitra |
 | FR-17 | Sistem menampilkan pesan loading, kosong, berhasil, dan gagal | Must | Pengguna mendapat umpan balik untuk setiap operasi utama |
 | FR-18 | Sistem mencatat riwayat perubahan status | Must | Riwayat memuat pesanan, status, waktu, dan aktor perubahan |
 | FR-19 | Sistem mengelola komplain dan payout simulasi | Must | Komplain dapat diajukan dalam 1 jam setelah selesai; payout otomatis hanya layak jika tidak ada komplain terbuka |
@@ -305,17 +307,17 @@ Persyaratan diberi ID agar dapat dilacak ke implementasi dan pengujian.
 
 ## 6.1 Aturan Status Pesanan, Pembayaran, dan Reservasi
 
-Status pesanan yang disarankan:
-- `pending_payment`: menunggu pembayaran digital simulasi.
-- `pending_partner`: menunggu keputusan mitra untuk pesanan tunai.
-- `accepted`: diterima mitra.
-- `rejected`: ditolak mitra.
-- `awaiting_customer_approval`: menunggu keputusan pelanggan atas kenaikan harga.
-- `processing`: pengerjaan berlangsung.
-- `ready_for_pickup`: siap diambil/diserahkan.
-- `completed`: mitra menandai pesanan selesai.
-- `cancelled`: pesanan dibatalkan sesuai aturan.
-- `expired`: melewati tenggat yang berlaku.
+Status siklus hidup pesanan:
+- `pending_partner`: pesanan dibuat pelanggan dengan estimasi berat; menunggu konfirmasi dan penimbangan ulang oleh mitra.
+- `pending_payment`: mitra telah menimbang ulang dan menerbitkan harga fix; menunggu konfirmasi pembayaran pelanggan.
+- `accepted`: pesanan diterima mitra (jika dipisahkan dari proses timbang).
+- `rejected`: pesanan ditolak mitra.
+- `awaiting_customer_approval`: menunggu keputusan pelanggan jika ada penyesuaian biaya khusus.
+- `processing`: pembayaran/tagihan telah dikonfirmasi pelanggan; pengerjaan pencucian pakaian berlangsung.
+- `ready_for_pickup`: pencucian selesai, pakaian siap diambil atau diserahkan ke pelanggan.
+- `completed`: pesanan telah diserahkan dan diselesaikan secara resmi.
+- `cancelled`: pesanan dibatalkan sesuai aturan yang berlaku.
+- `expired`: melewati tenggat waktu (30 menit respons mitra atau 15 menit pembayaran harga fix).
 
 Status pembayaran dan keuangan dipisahkan dari status pesanan:
 - Pembayaran: `pending`, `paid`, `failed`, `late_payment`, `refund_pending`, `refunded`.
@@ -324,9 +326,9 @@ Status pembayaran dan keuangan dipisahkan dari status pesanan:
 - Payout simulasi: `held`, `eligible`, `processing`, `paid`, `blocked`, `failed`.
 
 Aturan transisi utama:
-- Pembayaran digital yang belum terverifikasi dalam 15 menit membuat pesanan kedaluwarsa dan reservasi dilepas.
-- Pesanan tunai yang belum diterima/ditolak mitra dalam 30 menit membuat pesanan kedaluwarsa dan reservasi dilepas.
-- Mitra tidak boleh melanjutkan pengerjaan setelah kenaikan harga diajukan sampai pelanggan menyetujui.
+- Pesanan baru berstatus `pending_partner`. Mitra memiliki waktu 30 menit untuk merespons dan menimbang cucian; jika tidak, pesanan kedaluwarsa otomatis dan reservasi dilepas.
+- Setelah mitra menginput berat aktual, pesanan beralih ke `pending_payment` dengan tenggat waktu 15 menit untuk konfirmasi pembayaran oleh pelanggan.
+- Begitu pembayaran dikonfirmasi pelanggan, status otomatis berpindah ke `processing`. Mitra dilarang mencuci sebelum pembayaran terkonfirmasi.
 - Saat pesanan ditandai selesai, server mencatat `completed_at` dan menetapkan `complaint_deadline = completed_at + 1 hour`.
 - Jika tidak ada komplain terbuka setelah tenggat, payout simulasi menjadi layak dan diproses otomatis.
 - Jika komplain masuk sebelum tenggat, payout diblokir sampai hasil penyelesaian dijalankan.

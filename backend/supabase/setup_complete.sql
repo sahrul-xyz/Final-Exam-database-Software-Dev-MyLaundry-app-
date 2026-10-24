@@ -503,15 +503,11 @@ BEGIN
         RAISE EXCEPTION 'Outlet laundry tidak ditemukan atau sedang tidak aktif';
     END IF;
 
-    IF p_payment_method = 'digital' THEN
-        v_status := 'pending_payment';
-        v_payment_deadline := now() + INTERVAL '15 minutes';
-        v_partner_deadline := NULL;
-    ELSE
-        v_status := 'pending_partner';
-        v_payment_deadline := NULL;
-        v_partner_deadline := now() + INTERVAL '30 minutes';
-    END IF;
+    -- Alur baru: Pelanggan membuat estimasi, pesanan berstatus 'pending_partner'
+    -- Menunggu penimbangan ulang dan penetapan harga fix oleh mitra
+    v_status := 'pending_partner';
+    v_payment_deadline := NULL;
+    v_partner_deadline := now() + INTERVAL '30 minutes';
 
     v_order_number := '#ML-' || to_char(now(), 'YYMMDD') || '-' || floor(1000 + random() * 9000)::text;
 

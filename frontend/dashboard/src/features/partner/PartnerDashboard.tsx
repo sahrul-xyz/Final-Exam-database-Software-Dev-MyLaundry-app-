@@ -192,16 +192,17 @@ export function PartnerDashboard({
 
     setSavingWeight(true);
     const unitPrice = weighingOrder.items?.[0]?.unit_price_snapshot || 8000;
+    const finalAmount = Math.round(kg * unitPrice);
     const res = await updateOrderActualWeight(
       weighingOrder.id,
       kg,
       unitPrice,
-      `Timbangan aktual ${kg} kg dikonfirmasi. Total disesuaikan. Laundry mulai dicuci.`
+      `Timbangan aktual ${kg} kg dikonfirmasi mitra. Total tagihan fix Rp${finalAmount.toLocaleString("id-ID")}. Menunggu konfirmasi pembayaran pelanggan.`
     );
     setSavingWeight(false);
 
     if (res.success) {
-      notify(`Berat ${kg} kg disimpan! Laundry kini berstatus 'Sedang Dicuci'.`);
+      notify(`Berat ${kg} kg disimpan! Tagihan fix Rp${finalAmount.toLocaleString("id-ID")} dikirim ke pelanggan. Menunggu pembayaran.`);
       setWeighingOrder(null);
       loadOrders();
     } else {
@@ -514,7 +515,7 @@ export function PartnerDashboard({
                 Batal
               </Button>
               <Button onClick={handleSaveActualWeight} disabled={savingWeight}>
-                {savingWeight ? "Menyimpan..." : "Simpan & Mulai Cuci"}
+                {savingWeight ? "Menyimpan..." : "Konfirmasi Timbangan & Kirim Tagihan Fix"}
               </Button>
             </div>
           </div>
@@ -1029,23 +1030,36 @@ function OrderTable({
                       >
                         Tolak
                       </Button>
-                      <Button onClick={() => onAccept(order)}>
-                        Terima
+                      <Button onClick={() => onOpenWeighing(order)}>
+                        Timbang & Tetapkan Harga
                       </Button>
                     </div>
                   )}
 
-                  {/* Status: Menunggu Pembayaran Digital */}
+                  {/* Status: Menunggu Pembayaran Pelanggan (Harga Fix) */}
                   {order.status === "pending_payment" && (
-                    <small style={{ color: "var(--amber)", fontWeight: 600 }}>
-                      Menunggu Bayar
-                    </small>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <small style={{ color: "var(--amber)", fontWeight: 600 }}>
+                        Menunggu Bayar (Fix: Rp{(order.final_service_amount || order.subtotal_estimate).toLocaleString("id-ID")})
+                      </small>
+                      {order.payment_method === "cash" && (
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            onStatusTransition(order, "processing", "Sedang Dicuci (Bayar Tunai)")
+                          }
+                          style={{ fontSize: "11px", padding: "4px 8px" }}
+                        >
+                          Konfirmasi Tunai & Cuci
+                        </Button>
+                      )}
+                    </div>
                   )}
 
-                  {/* Status: Diterima -> Siap Timbang & Mulai Cuci */}
+                  {/* Status: Diterima -> Siap Timbang & Tetapkan Harga Fix */}
                   {order.status === "accepted" && (
                     <Button onClick={() => onOpenWeighing(order)}>
-                      Timbang & Cuci
+                      Timbang & Tetapkan Harga
                     </Button>
                   )}
 

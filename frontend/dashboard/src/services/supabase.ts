@@ -1171,12 +1171,13 @@ export async function updateOrderActualWeight(
         .eq("id", items[0].id);
     }
 
-    // 2. Update status order menjadi 'processing' dan set final_service_amount
+    // 2. Update status order menjadi 'pending_payment' dan set final_service_amount (Harga Fix)
     const { error: orderError } = await supabase
       .from("orders")
       .update({
         final_service_amount: finalAmount,
-        status: "processing",
+        status: "pending_payment",
+        payment_deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", orderId);
@@ -1188,13 +1189,13 @@ export async function updateOrderActualWeight(
     // 3. Catat di order_status_history
     await supabase.from("order_status_history").insert({
       order_id: orderId,
-      new_status: "processing",
+      new_status: "pending_payment",
       changed_by: user?.id || null,
       note:
         note ||
-        `Timbangan aktual dikonfirmasi mitra: ${actualKg} kg (Total: Rp${finalAmount.toLocaleString(
+        `Timbangan aktual dikonfirmasi mitra: ${actualKg} kg. Total tagihan fix: Rp${finalAmount.toLocaleString(
           "id-ID"
-        )}). Laundry mulai diproses.`,
+        )}. Menunggu konfirmasi pembayaran pelanggan.`,
     });
 
     return { success: true, error: null };

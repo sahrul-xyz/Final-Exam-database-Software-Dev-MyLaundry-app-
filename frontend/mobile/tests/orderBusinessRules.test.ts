@@ -39,9 +39,9 @@ export function isComplaintEligible(completedAt: Date, complaintTime: Date): boo
 
 export function isValidStatusTransition(current: OrderStatus, next: OrderStatus): boolean {
   const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-    pending_payment: ["pending_partner", "cancelled", "expired"],
-    pending_partner: ["accepted", "rejected", "expired", "cancelled"],
-    accepted: ["processing", "awaiting_customer_approval", "cancelled"],
+    pending_payment: ["processing", "cancelled", "expired"],
+    pending_partner: ["accepted", "pending_payment", "rejected", "expired", "cancelled"],
+    accepted: ["pending_payment", "processing", "awaiting_customer_approval", "cancelled"],
     awaiting_customer_approval: ["processing", "cancelled"],
     processing: ["ready_for_pickup"],
     ready_for_pickup: ["completed"],
@@ -115,10 +115,13 @@ describe("Aturan Bisnis Pesanan (PRD v1.2 Bab 4 & 9)", () => {
   });
 
   describe("Transisi Siklus Status Pesanan (PRD Bab 9.3)", () => {
-    it("memvalidasi transisi status normal", () => {
-      expect(isValidStatusTransition("pending_payment", "pending_partner")).toBe(true);
+    it("memvalidasi transisi status alur penimbangan & pembayaran fix", () => {
+      // Pelanggan buat estimasi -> mitra timbang ulang & terbitkan harga fix
+      expect(isValidStatusTransition("pending_partner", "pending_payment")).toBe(true);
       expect(isValidStatusTransition("pending_partner", "accepted")).toBe(true);
-      expect(isValidStatusTransition("accepted", "processing")).toBe(true);
+      expect(isValidStatusTransition("accepted", "pending_payment")).toBe(true);
+      // Pelanggan konfirmasi pembayaran -> cucian mulai diproses
+      expect(isValidStatusTransition("pending_payment", "processing")).toBe(true);
       expect(isValidStatusTransition("processing", "ready_for_pickup")).toBe(true);
       expect(isValidStatusTransition("ready_for_pickup", "completed")).toBe(true);
     });

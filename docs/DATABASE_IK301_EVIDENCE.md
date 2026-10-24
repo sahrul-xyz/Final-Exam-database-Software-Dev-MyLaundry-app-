@@ -114,16 +114,11 @@ BEGIN
         RAISE EXCEPTION 'Outlet laundry tidak ditemukan atau sedang tidak aktif';
     END IF;
 
-    -- Tentukan status awal sesuai metode pembayaran
-    IF p_payment_method = 'digital' THEN
-        v_status := 'pending_payment';
-        v_payment_deadline := now() + INTERVAL '15 minutes';
-        v_partner_deadline := NULL;
-    ELSE
-        v_status := 'pending_partner';
-        v_payment_deadline := NULL;
-        v_partner_deadline := now() + INTERVAL '30 minutes';
-    END IF;
+    -- Alur Weighing-First: Semua pesanan baru dibuat dengan estimasi berat
+    -- Menunggu penimbangan ulang dan penetapan harga fix oleh mitra
+    v_status := 'pending_partner';
+    v_payment_deadline := NULL;
+    v_partner_deadline := now() + INTERVAL '30 minutes';
 
     v_order_number := '#ML-' || to_char(now(), 'YYMMDD') || '-' || floor(1000 + random() * 9000)::text;
 
@@ -199,7 +194,7 @@ SELECT public.create_order_atomic(
     24000.00
 );
 ```
-*Hasil:* Mengembalikan JSON `{ "success": true, "order_id": "...", "status": "pending_payment" }`. Data masuk secara serentak ke `orders`, `order_items`, `order_status_history`, dan `capacity_reservations`.
+*Hasil:* Mengembalikan JSON `{ "success": true, "order_id": "...", "status": "pending_partner" }`. Data masuk secara serentak ke `orders`, `order_items`, `order_status_history`, dan `capacity_reservations` dengan status menunggu penimbangan ulang mitra.
 
 #### Skenario 2: Transaksi Gagal (Pembuktian ROLLBACK)
 ```sql

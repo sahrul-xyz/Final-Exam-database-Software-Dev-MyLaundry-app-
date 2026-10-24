@@ -296,10 +296,7 @@ export async function createCustomerOrder(params: {
     const orderNumber = `#ML-${dateCode}-${randomSuffix}`;
     const serviceDate = new Date().toISOString().split("T")[0];
 
-    const initialStatus =
-      params.paymentMethod === "digital"
-        ? "pending_payment"
-        : "pending_partner";
+    const initialStatus = "pending_partner";
 
     const serviceUuid = params.service.id.startsWith("srv-")
       ? null
@@ -647,7 +644,7 @@ export async function confirmDigitalPaymentSimulation(params: {
     const { error } = await supabase
       .from("orders")
       .update({
-        status: "pending_partner",
+        status: "processing",
         payment_status: "paid",
         updated_at: new Date().toISOString(),
       })
@@ -669,14 +666,48 @@ export async function confirmDigitalPaymentSimulation(params: {
 
     await supabase.from("order_status_history").insert({
       order_id: params.orderId,
-      new_status: "pending_partner",
+      new_status: "processing",
       changed_by: params.customerId,
-      note: "Pembayaran digital simulasi berhasil diselesaikan oleh pelanggan.",
+      note: params.amount
+        ? `Pembayaran harga fix Rp${params.amount.toLocaleString("id-ID")} berhasil diselesaikan pelanggan. Pengerjaan cuci dimulai.`
+        : "Pembayaran berhasil diselesaikan. Laundry mulai diproses.",
     });
 
     return { success: true, error: null };
   } catch (err: any) {
     return { success: false, error: err.message || "Gagal memproses pembayaran" };
+  }
+}
+
+export async function confirmCashPaymentAfterWeighing(params: {
+  orderId: string;
+  customerId: string;
+  amount?: number;
+}): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        status: "processing",
+        payment_status: "pending",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", params.orderId);
+
+    if (error) return { success: false, error: error.message };
+
+    await supabase.from("order_status_history").insert({
+      order_id: params.orderId,
+      new_status: "processing",
+      changed_by: params.customerId,
+      note: params.amount
+        ? `Pelanggan mengonfirmasi harga fix Rp${params.amount.toLocaleString("id-ID")} (Bayar Tunai saat selesai). Pengerjaan cuci dimulai.`
+        : "Pelanggan mengonfirmasi tagihan tunai. Laundry mulai diproses.",
+    });
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Gagal mengonfirmasi pesanan tunai" };
   }
 }
 

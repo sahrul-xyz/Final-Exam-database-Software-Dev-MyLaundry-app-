@@ -201,21 +201,16 @@ export function OrderModal({
     if (error) {
       Alert.alert("Gagal Membuat Pesanan", error);
     } else if (order) {
-      if (paymentMethod === "digital") {
-        setCreatedOrder(order);
-        setStep("payment");
-      } else {
-        Alert.alert(
-          "Pesanan Berhasil Dibuat! 🎉",
-          `Nomor pesanan: ${order.orderNumber}\nMetode: Tunai.\nOutlet akan segera memproses pesanan Anda.`,
-          [
-            {
-              text: "Lihat Pesanan Saya",
-              onPress: () => onOrderSuccess(order),
-            },
-          ],
-        );
-      }
+      Alert.alert(
+        "Pesanan Berhasil Dibuat! 🎉",
+        `Nomor Pesanan: ${order.orderNumber}\nEstimasi: ${quantity} ${unitLabel} (~Rp${totalEstimate.toLocaleString("id-ID")})\n\nPihak outlet akan mengonfirmasi dan menimbang ulang cucian Anda. Tagihan dengan harga fix akan muncul di tab Pesanan untuk Anda konfirmasi sebelum proses cuci dimulai.`,
+        [
+          {
+            text: "Lihat Pesanan Saya",
+            onPress: () => onOrderSuccess(order),
+          },
+        ],
+      );
     }
   };
 
@@ -681,6 +676,11 @@ export function OrderModal({
                     Rp{totalEstimate.toLocaleString("id-ID")}
                   </Text>
                 </View>
+                <View style={{ marginTop: 8, padding: 8, backgroundColor: "#eff6ff", borderRadius: 8 }}>
+                  <Text style={{ fontSize: 11, color: "#1d4ed8", lineHeight: 16 }}>
+                    ℹ️ Total di atas merupakan estimasi. Pihak outlet akan menimbang ulang cucian Anda dan memunculkan harga fix untuk Anda konfirmasi sebelum proses cuci dimulai.
+                  </Text>
+                </View>
               </View>
 
               {/* Tombol Aksi */}
@@ -694,7 +694,7 @@ export function OrderModal({
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
                   <Text style={styles.submitBtnText}>
-                    Konfirmasi & Buat Pesanan
+                    Kirim Pesanan (Estimasi Berat)
                   </Text>
                 )}
               </TouchableOpacity>
